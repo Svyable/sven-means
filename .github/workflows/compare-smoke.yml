@@ -29,10 +29,12 @@ jobs:
           set -euo pipefail
           python benchmarks/compare.py --baseline --kind gaussian --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode randperm --output /tmp/gauss-rand.json > /dev/null
           python benchmarks/compare.py --baseline --kind gaussian --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode feistel --output /tmp/gauss-feistel.json > /dev/null
+          python benchmarks/compare.py --baseline --kind gaussian --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode affine --output /tmp/gauss-affine.json > /dev/null
+          python benchmarks/compare.py --baseline --kind zipf --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode affine --output /tmp/zipf-affine.json > /dev/null
           python benchmarks/compare.py --baseline --kind zipf --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode feistel --output /tmp/zipf-feistel.json > /dev/null
           python - <<'PY'
           import json
-          for path in ['/tmp/gauss-rand.json', '/tmp/gauss-feistel.json', '/tmp/zipf-feistel.json']:
+          for path in ['/tmp/gauss-rand.json', '/tmp/gauss-feistel.json', '/tmp/gauss-affine.json', '/tmp/zipf-feistel.json', '/tmp/zipf-affine.json']:
               result = json.load(open(path))
               print('\n===', path, '===')
               for name, values in result['summary'].items():
