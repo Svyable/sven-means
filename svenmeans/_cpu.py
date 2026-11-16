@@ -9,6 +9,8 @@ import torch
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
+    affine_epoch_indices,
+    affine_epoch_key,
     feistel_epoch_indices,
     feistel_epoch_key,
     make_generator,
@@ -85,8 +87,8 @@ def fit_cpu(
     alpha0 = recipe.alpha0
     check_every = recipe.check_every
     unused_thresh = recipe.unused_thresh
-    if cfg.shuffle_mode not in ("randperm", "feistel"):
-        raise ValueError("shuffle_mode must be 'randperm' or 'feistel'")
+    if cfg.shuffle_mode not in ("randperm", "feistel", "affine"):
+        raise ValueError("shuffle_mode must be 'randperm', 'feistel' or 'affine'")
     epoch_rows = compute_epoch_rows(n, nepochs)
     total_steps = sum((rows + batch_size - 1) // batch_size for rows in epoch_rows)
 
@@ -124,14 +126,20 @@ def fit_cpu(
             )
         else:
             perm = None
-            epoch_key = feistel_epoch_key(n, seed, ep_idx)
+            epoch_key = (feistel_epoch_key(n, seed, ep_idx)
+                         if cfg.shuffle_mode == "feistel" else
+                         affine_epoch_key(n, seed, ep_idx))
         is_last_pass = ep_idx == n_ep - 1
         steps_in_ep = (rows + batch_size - 1) // batch_size
 
         for s_ep, begin in enumerate(range(0, rows, batch_size)):
             end = min(begin + batch_size, rows)
-            idx = (perm[begin:end] if perm is not None else
-                   feistel_epoch_indices(n, begin, end, epoch_key, device))
+            if perm is not None:
+                idx = perm[begin:end]
+            elif cfg.shuffle_mode == "feistel":
+                idx = feistel_epoch_indices(n, begin, end, epoch_key, device)
+            else:
+                idx = affine_epoch_indices(n, begin, end, epoch_key, device)
             xb = x_f[idx]
             xbn = x_norm[idx]
             b = int(xb.shape[0])
