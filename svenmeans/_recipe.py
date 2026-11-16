@@ -25,7 +25,7 @@ class SMeansConfig:
     init_max_samples: int = 16384
     init_tile_cols: int = 128
     center_data: bool = False
-    shuffle_mode: str = "randperm"  # "feistel" trades some time for O(batch) shuffle memory
+    shuffle_mode: str = "randperm"  # "affine" or "feistel" use O(batch) index memory
     assign_tile_rows: int = 512
     assign_tile_cols: int = 256
 
@@ -292,3 +292,42 @@ def feistel_epoch_indices(
         values[pending] = _feistel_permute(values[pending], width, keys)
         pending = values >= n
     return values
+
+
+def affine_epoch_key(n: int, seed: int, epoch: int) -> tuple[int, int]:
+    """Choose a coprime affine multiplier/offset, avoiding signed-int64 overflow.
+
+    The mapping (a*i+b) % n is a bijection iff gcd(a,n)==1, but it is much
+    less well-mixed than a random permutation or the Feistel alternative.
+    """
+    if n < 1:
+        raise ValueError("n must be positive")
+    if n == 1:
+        return (1, 0)
+    max_a = min(n - 1, ((1 << 63) - n) // (n - 1))
+    if max_a < 1:
+        raise ValueError("n too large for overflow-safe affine shuffle")
+    mix_seed = ((int(seed) & ((1 << 64) - 1))
+                ^ ((int(epoch) + 1) * 0xD1B54A32D192ED03 & ((1 << 64) - 1)))
+    rng = random.Random(mix_seed)
+    a = 1
+    for _ in range(128):
+        candidate = rng.randint(1, max_a)
+        if math.gcd(candidate, n) == 1:
+            a = candidate
+            break
+    return (a, rng.randrange(n))
+
+
+def affine_epoch_indices(
+    n: int,
+    begin: int,
+    end: int,
+    key: tuple[int, int],
+    device: torch.device,
+) -> torch.Tensor:
+    """Generate an exact, full-coverage permutation in O(batch) memory."""
+    if n < 1 or not 0 <= begin <= end <= n:
+        raise ValueError("Require n>=1 and 0 <= begin <= end <= n")
+    a, b = key
+    return (torch.arange(begin, end, dtype=torch.int64, device=device) * a + b) % n
