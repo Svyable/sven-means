@@ -28,3 +28,9 @@ python benchmarks/compare.py --kind zipf --n 20000 --k 256 --shuffle-mode feiste
 ```
 
 Compare median fit time, held-out MSE distribution and peak memory; repeat on actual embeddings whose input order may be meaningful. Only promote Feistel to default after this evidence is convincing.
+
+## Faster alternative: affine modular permutation
+
+`shuffle_mode="affine"` maps `i -> (a*i + b) mod n`, where `a` is chosen coprime to `n` (verified by Euclid's algorithm) and `b` is an epoch-specific offset. Multiplication by a unit in the ring `Z/nZ` is invertible, so this also visits every row exactly once without allocating `randperm(n)`. The multiplier is constrained to avoid signed-int64 overflow for all possible row positions.
+
+This eliminates cycle walking and its GPU synchronizations. However, the traversal is a regular arithmetic progression, not a pseudorandom-looking permutation; sorted or patterned input may suffer statistically. Benchmark both options against `randperm` and inspect convergence as well as runtime.

@@ -78,7 +78,7 @@ def main():
     parser.add_argument("--data-seed", type=int, default=2026)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--center-data", action="store_true")
-    parser.add_argument("--shuffle-mode", choices=["randperm", "feistel"], default="randperm")
+    parser.add_argument("--shuffle-mode", choices=["randperm", "feistel", "affine"], default="randperm")
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()

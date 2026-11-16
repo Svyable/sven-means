@@ -3,7 +3,7 @@ import pytest
 import torch
 
 from svenmeans import SMeansConfig, smeans
-from svenmeans._recipe import feistel_epoch_indices, feistel_epoch_key
+from svenmeans._recipe import affine_epoch_indices, affine_epoch_key, feistel_epoch_indices, feistel_epoch_key
 
 
 @pytest.mark.parametrize("n", [1, 2, 3, 4, 5, 7, 17, 63, 64, 65, 257, 1025, 4096])
@@ -35,7 +35,8 @@ def test_per_epoch_seed_changes_order():
     assert not torch.equal(one, two)
 
 
-def test_full_fit_does_not_allocate_full_shuffle(monkeypatch):
+@pytest.mark.parametrize("mode", ["feistel", "affine"])
+def test_full_fit_does_not_allocate_full_shuffle(monkeypatch, mode):
     original = torch.randperm
     n = 10_000
 
@@ -46,7 +47,7 @@ def test_full_fit_does_not_allocate_full_shuffle(monkeypatch):
 
     monkeypatch.setattr(torch, "randperm", guarded)
     x = torch.randn(n, 4, generator=torch.Generator().manual_seed(9))
-    config = SMeansConfig(shuffle_mode="feistel", init_tile_cols=32)
+    config = SMeansConfig(shuffle_mode=mode, init_tile_cols=32)
     first = smeans(x, 24, nepochs=1.5, seed=3, config=config,
                    device="cpu", compute_labels=False, return_info=True)
     second = smeans(x, 24, nepochs=1.5, seed=3, config=config,
@@ -68,3 +69,19 @@ def test_cpu_gpu_index_permutation_parity():
     cpu = feistel_epoch_indices(n, 0, n, key, torch.device("cpu"))
     gpu = feistel_epoch_indices(n, 0, n, key, torch.device("cuda")).cpu()
     assert torch.equal(cpu, gpu)
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 5, 12, 17, 64, 65, 257, 1025, 4096])
+@pytest.mark.parametrize("seed", [0, 5])
+def test_affine_is_exact_permutation(n, seed):
+    key = affine_epoch_key(n, seed, 3)
+    chunks = [
+        affine_epoch_indices(n, begin, min(begin + 63, n), key, torch.device("cpu"))
+        for begin in range(0, n, 63)
+    ]
+    ids = torch.cat(chunks)
+    assert torch.equal(torch.sort(ids).values, torch.arange(n))
+
+
+def test_affine_epoch_key_changes_across_epochs():
+    assert affine_epoch_key(1009, 0, 0) != affine_epoch_key(1009, 0, 1)

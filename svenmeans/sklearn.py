@@ -81,9 +81,10 @@ class SMeans(
     center_data : bool, default=False
         Fit after subtracting the feature mean for numerical stability on
         large-offset input, at the cost of one extra centered dataset copy.
-    shuffle_mode : {"randperm", "feistel"}, default="randperm"
-        Feistel produces deterministic, on-demand, unique epoch indices in
-        O(batch) space, but is not statistically equivalent to randperm.
+    shuffle_mode : {"randperm", "feistel", "affine"}, default="randperm"
+        Feistel offers stronger mixing with cycle walking; affine is cheaper
+        and exactly bijective but more regular. Neither is a uniform random
+        permutation. Both generate on-demand indices in O(batch) space.
     random_state : int, default=None
         Random seed controlling initialization, batch shuffling, and revival splits.
     """
@@ -107,7 +108,7 @@ class SMeans(
         "init_max_samples": [Interval(Integral, 1, None, closed="left")],
         "init_tile_cols": [Interval(Integral, 1, None, closed="left")],
         "center_data": ["boolean"],
-        "shuffle_mode": [StrOptions({"randperm", "feistel"})],
+        "shuffle_mode": [StrOptions({"randperm", "feistel", "affine"})],
         "assign_tile_rows": [Interval(Integral, 16, None, closed="left")],
         "assign_tile_cols": [Interval(Integral, 16, None, closed="left")],
         "random_state": ["random_state"],

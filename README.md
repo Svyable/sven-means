@@ -8,7 +8,7 @@ An experimental, MIT-licensed refactor of [s-means](https://github.com/suayptalh
 2. **Avoid full-`n` permutation for small coresets.** When `m << n`, we sample and deduplicate a bounded index pool instead of building `randperm(n)`. A random permutation of the distinct pool prevents a bias toward lower row indices. Selected initial centroids are unique **row indices**, including for repeated data values.
 3. **Numerically robust initialization and inference.** Distance calculations use a shared coordinate anchor before the squared-norm identity to reduce floating-point cancellation. `SMeansConfig(center_data=True)` optionally centers the full fit, with explicit extra `O(nd)` storage and preparation time.
 4. **Centroids-only CPU fitting.** `smeans(..., compute_labels=False, return_info=True)` avoids the final `O(nkd)` assignment pass and correctly returns `labels=None`, `inertia=None`, `mse=None`.
-5. **On-demand shuffled epochs (experimental).** `SMeansConfig(shuffle_mode="feistel")` uses a six-round Feistel permutation plus cycle-walking to visit every row exactly once without `randperm(n)`. This uses `O(batch)` index memory; it does **not** give a uniform random permutation and may trade speed or convergence behavior for memory. See [the design note](docs/feistel-shuffle.md).
+5. **On-demand shuffled epochs (experimental).** Choose `shuffle_mode="affine"` (cheap modular bijection) or `"feistel"` (stronger mixing through six Feistel rounds and cycle-walking) to avoid `randperm(n)`. Both use `O(batch)` index memory; neither is a uniform random permutation. The default remains `"randperm"`. See [the design note](docs/feistel-shuffle.md).
 6. **Preserved core clustering algorithm.** Distortion-aware revival, cosine decay, and final-pass refinement remain upstream s-means mechanisms. Their accuracy benefits are not newly claimed here.
 
 ## Install and use
@@ -26,7 +26,7 @@ x = torch.randn(20_000, 64)
 result = smeans(
     x, n_clusters=256, nepochs=3, device="cpu",
     config=SMeansConfig(init_max_samples=8192, init_tile_cols=64,
-                        shuffle_mode="feistel"),  # opt-in, benchmark before use
+                        shuffle_mode="affine"),  # opt-in, benchmark before use
     compute_labels=False, return_info=True,
 )
 centers = result.centroids
@@ -50,7 +50,7 @@ To compare against the exact original s-means Python package, separately install
 
 ## Known limitations
 
-- Feistel shuffling is a bijection, **not a uniformly random shuffle**. It is a research option and may change clustering quality or add synchronizations on GPU.
+- Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
 - Tiling reduces memory, **not the `O(mkd)` seeding arithmetic**. Large `k` needs approximate, hierarchical, or sharded initialization.
 - Full-data centering costs an extra tensor copy, can affect runtime, and is disabled by default.
 - This first refactor does **not** add a new cluster-splitting heuristic: that requires controlled evaluation on real embeddings, not just synthetic distributions.
