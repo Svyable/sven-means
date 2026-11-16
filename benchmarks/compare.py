@@ -78,6 +78,7 @@ def main():
     parser.add_argument("--data-seed", type=int, default=2026)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--center-data", action="store_true")
+    parser.add_argument("--shuffle-mode", choices=["randperm", "feistel"], default="randperm")
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -94,7 +95,7 @@ def main():
             parser.error("Install upstream s-means separately before --baseline: " + str(exc))
 
     train, test = make_dataset(args.kind, args.n, args.d, args.k, args.data_seed, args.device)
-    config = SMeansConfig(center_data=args.center_data)
+    config = SMeansConfig(center_data=args.center_data, shuffle_mode=args.shuffle_mode)
     methods = [
         ("sven-means", lambda x, seed: smeans(
             x, args.k, nepochs=args.epochs, seed=seed, device=args.device,
