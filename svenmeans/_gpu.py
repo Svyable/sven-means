@@ -9,6 +9,8 @@ import torch
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
+    affine_epoch_indices,
+    affine_epoch_key,
     feistel_epoch_indices,
     feistel_epoch_key,
     make_recipe,
@@ -124,8 +126,8 @@ def fit_gpu(
     alpha0 = recipe.alpha0
     check_every = recipe.check_every
     unused_thresh = recipe.unused_thresh
-    if cfg.shuffle_mode not in ("randperm", "feistel"):
-        raise ValueError("shuffle_mode must be 'randperm' or 'feistel'")
+    if cfg.shuffle_mode not in ("randperm", "feistel", "affine"):
+        raise ValueError("shuffle_mode must be 'randperm', 'feistel' or 'affine'")
     epoch_rows = compute_epoch_rows(n, nepochs)
     n_ep = len(epoch_rows)
     total_steps = sum((r + batch_size - 1) // batch_size for r in epoch_rows)
@@ -170,7 +172,9 @@ def fit_gpu(
             perm = torch.randperm(n, generator=shuf_rng, device=device)[:rows_in_ep]
         else:
             perm = None
-            epoch_key = feistel_epoch_key(n, seed, ep)
+            epoch_key = (feistel_epoch_key(n, seed, ep)
+                         if cfg.shuffle_mode == "feistel" else
+                         affine_epoch_key(n, seed, ep))
         n_sep = (rows_in_ep + batch_size - 1) // batch_size
         is_final_ep = ep == n_ep - 1
 
@@ -193,8 +197,12 @@ def fit_gpu(
             for c0 in range(0, b_cur, max_chunk):
                 c1 = min(c0 + max_chunk, b_cur)
                 sub_b = c1 - c0
-                sub_idx = (perm[i0 + c0 : i0 + c1] if perm is not None else
-                           feistel_epoch_indices(n, i0 + c0, i0 + c1, epoch_key, device))
+                if perm is not None:
+                    sub_idx = perm[i0 + c0 : i0 + c1]
+                elif cfg.shuffle_mode == "feistel":
+                    sub_idx = feistel_epoch_indices(n, i0 + c0, i0 + c1, epoch_key, device)
+                else:
+                    sub_idx = affine_epoch_indices(n, i0 + c0, i0 + c1, epoch_key, device)
                 sub_raw = x_in[sub_idx]
                 sub_rep = sub_raw if sub_raw.dtype == assign_dtype else sub_raw.to(assign_dtype)
                 if not sub_rep.is_contiguous():
