@@ -228,6 +228,8 @@ class SMeans(
             sw = self._validate_sample_weight(sample_weight, n_samples)
             active = sw > 0
             n_active = int(active.sum())
+            if n_active == 0:
+                raise ValueError("All sample weights are zero.")
             if n_active < self.n_clusters:
                 raise ValueError(
                     f"Number of samples with positive weight ({n_active}) must be >= n_clusters ({self.n_clusters})."
