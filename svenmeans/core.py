@@ -1,6 +1,7 @@
 """Core PyTorch and NumPy tensor interface for s-means clustering."""
 
 from dataclasses import dataclass
+import time
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -49,10 +50,13 @@ def assign_clusters(
     xt = x if isinstance(x, torch.Tensor) else torch.as_tensor(np.asarray(x), dtype=torch.float32)
     if xt.device != centroids.device:
         xt = xt.to(centroids.device)
-    if xt.is_cuda:
-        return assign_gpu(xt, centroids, backend=backend, dtype_mode=dtype)
-    xt_f = xt.detach().to(dtype=torch.float32).contiguous()
-    c_f = centroids.detach().to(dtype=torch.float32).contiguous()
+    # Translation-invariant assignment avoids catastrophic cancellation in
+    # ||x||^2 + ||c||^2 - 2*x@c when coordinates have large common offsets.
+    anchor = centroids[:1].detach().to(dtype=torch.float32)
+    xt_f = (xt.detach().to(dtype=torch.float32) - anchor).contiguous()
+    c_f = (centroids.detach().to(dtype=torch.float32) - anchor).contiguous()
+    if xt_f.is_cuda:
+        return assign_gpu(xt_f, c_f, backend=backend, dtype_mode=dtype)
     return tiled_assign(xt_f, c_f, tile_rows=tile_rows, tile_cols=tile_cols)
 
 
@@ -107,9 +111,15 @@ def smeans(
     if n_samples < n_clusters:
         raise ValueError(f"n_samples ({n_samples}) must be >= n_clusters ({n_clusters})")
 
+    prep_start = time.perf_counter()
     target_dev = _resolve_device(xt, device)
     if xt.device != target_dev:
         xt = xt.to(target_dev)
+    # Optional opt-in for shifted/large-magnitude data; extra O(n*d) storage.
+    origin = None
+    if cfg.center_data:
+        origin = xt.to(dtype=torch.float32).mean(dim=0)
+        xt = (xt.to(dtype=torch.float32) - origin).contiguous()
 
     if target_dev.type == "cuda":
         raw = fit_gpu(
@@ -129,9 +139,14 @@ def smeans(
             nepochs=float(nepochs),
             seed=int(seed),
             cfg=cfg,
+            compute_labels=compute_labels,
         )
-        if not compute_labels:
-            raw["labels"] = None
+
+    if origin is not None:
+        raw["centroids"] = raw["centroids"] + origin[None, :]
+        if xt.is_cuda:
+            torch.cuda.synchronize(xt.device)
+        raw["time_s"] = time.perf_counter() - prep_start
 
     if not return_info:
         return raw["centroids"]
