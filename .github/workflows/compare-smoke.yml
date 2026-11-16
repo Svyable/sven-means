@@ -1,0 +1,46 @@
+name: Observational s-means comparison
+on:
+  pull_request:
+    paths:
+      - 'svenmeans/**'
+      - 'benchmarks/**'
+      - '.github/workflows/compare-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install this fork and pinned upstream
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install 'git+https://github.com/suayptalha/s-means.git@83c20d09621bf8be2b7ca896359d17c1cca54f0c'
+      - name: Run fixed-seed synthetic smoke comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python benchmarks/compare.py --baseline --kind gaussian --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode randperm --output /tmp/gauss-rand.json > /dev/null
+          python benchmarks/compare.py --baseline --kind gaussian --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode feistel --output /tmp/gauss-feistel.json > /dev/null
+          python benchmarks/compare.py --baseline --kind zipf --n 10000 --d 32 --k 128 --epochs 3 --seeds 3 --shuffle-mode feistel --output /tmp/zipf-feistel.json > /dev/null
+          python - <<'PY'
+          import json
+          for path in ['/tmp/gauss-rand.json', '/tmp/gauss-feistel.json', '/tmp/zipf-feistel.json']:
+              result = json.load(open(path))
+              print('\n===', path, '===')
+              for name, values in result['summary'].items():
+                  print(f"{name}: test MSE {values['mean_test_mse']:.4f}; median fit {values['median_fit_ms']:.1f} ms")
+          PY
+      - name: Upload observed run data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-smoke-benchmark-json
+          path: /tmp/*-*.json
+          retention-days: 14
