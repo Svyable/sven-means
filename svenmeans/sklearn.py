@@ -81,6 +81,9 @@ class SMeans(
     center_data : bool, default=False
         Fit after subtracting the feature mean for numerical stability on
         large-offset input, at the cost of one extra centered dataset copy.
+    shuffle_mode : {"randperm", "feistel"}, default="randperm"
+        Feistel produces deterministic, on-demand, unique epoch indices in
+        O(batch) space, but is not statistically equivalent to randperm.
     random_state : int, default=None
         Random seed controlling initialization, batch shuffling, and revival splits.
     """
@@ -104,6 +107,7 @@ class SMeans(
         "init_max_samples": [Interval(Integral, 1, None, closed="left")],
         "init_tile_cols": [Interval(Integral, 1, None, closed="left")],
         "center_data": ["boolean"],
+        "shuffle_mode": [StrOptions({"randperm", "feistel"})],
         "assign_tile_rows": [Interval(Integral, 16, None, closed="left")],
         "assign_tile_cols": [Interval(Integral, 16, None, closed="left")],
         "random_state": ["random_state"],
@@ -130,6 +134,7 @@ class SMeans(
         init_max_samples: int = 16384,
         init_tile_cols: int = 128,
         center_data: bool = False,
+        shuffle_mode: str = "randperm",
         assign_tile_rows: int = 512,
         assign_tile_cols: int = 256,
         random_state: Optional[int] = None,
@@ -152,6 +157,7 @@ class SMeans(
         self.init_max_samples = init_max_samples
         self.init_tile_cols = init_tile_cols
         self.center_data = center_data
+        self.shuffle_mode = shuffle_mode
         self.assign_tile_rows = assign_tile_rows
         self.assign_tile_cols = assign_tile_cols
         self.random_state = random_state
@@ -193,6 +199,7 @@ class SMeans(
             init_max_samples=int(self.init_max_samples),
             init_tile_cols=int(self.init_tile_cols),
             center_data=bool(self.center_data),
+            shuffle_mode=self.shuffle_mode,
             assign_tile_rows=int(self.assign_tile_rows),
             assign_tile_cols=int(self.assign_tile_cols),
         )
