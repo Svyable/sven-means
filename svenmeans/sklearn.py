@@ -18,7 +18,7 @@ from sklearn.utils.validation import check_is_fitted, validate_data
 from ._cpu import tiled_assign
 from ._gpu import _resolve_backend, assign_gpu
 from ._recipe import SMeansConfig
-from .core import svenmeans
+from .core import assign_clusters, smeans
 
 
 class SMeans(
@@ -74,6 +74,13 @@ class SMeans(
         Row tile size for CPU cache-blocked assignment.
     assign_tile_cols : int, default=256
         Centroid column tile size for CPU cache-blocked assignment.
+    init_max_samples : int, default=16384
+        Maximum seeding coreset size (always at least n_clusters).
+    init_tile_cols : int, default=128
+        Centroid columns evaluated per initialization tile.
+    center_data : bool, default=False
+        Fit after subtracting the feature mean for numerical stability on
+        large-offset input, at the cost of one extra centered dataset copy.
     random_state : int, default=None
         Random seed controlling initialization, batch shuffling, and revival splits.
     """
@@ -94,6 +101,9 @@ class SMeans(
         "var_beta": [Interval(Real, 0.0, 1.0, closed="neither")],
         "init_rounds": [Interval(Integral, 2, None, closed="left")],
         "init_power": [Interval(Real, 0.0, None, closed="left")],
+        "init_max_samples": [Interval(Integral, 1, None, closed="left")],
+        "init_tile_cols": [Interval(Integral, 1, None, closed="left")],
+        "center_data": ["boolean"],
         "assign_tile_rows": [Interval(Integral, 16, None, closed="left")],
         "assign_tile_cols": [Interval(Integral, 16, None, closed="left")],
         "random_state": ["random_state"],
@@ -117,6 +127,9 @@ class SMeans(
         var_beta: float = 0.85,
         init_rounds: int = 4,
         init_power: float = 1.5,
+        init_max_samples: int = 16384,
+        init_tile_cols: int = 128,
+        center_data: bool = False,
         assign_tile_rows: int = 512,
         assign_tile_cols: int = 256,
         random_state: Optional[int] = None,
@@ -136,6 +149,9 @@ class SMeans(
         self.var_beta = var_beta
         self.init_rounds = init_rounds
         self.init_power = init_power
+        self.init_max_samples = init_max_samples
+        self.init_tile_cols = init_tile_cols
+        self.center_data = center_data
         self.assign_tile_rows = assign_tile_rows
         self.assign_tile_cols = assign_tile_cols
         self.random_state = random_state
@@ -174,6 +190,9 @@ class SMeans(
             var_beta=float(self.var_beta),
             init_rounds=int(self.init_rounds),
             init_power=float(self.init_power),
+            init_max_samples=int(self.init_max_samples),
+            init_tile_cols=int(self.init_tile_cols),
+            center_data=bool(self.center_data),
             assign_tile_rows=int(self.assign_tile_rows),
             assign_tile_cols=int(self.assign_tile_cols),
         )
@@ -266,16 +285,10 @@ class SMeans(
     def _assign_array(self, X_np: np.ndarray):
         c_dev = self._centroids_tensor_
         xt = torch.as_tensor(np.ascontiguousarray(X_np, dtype=np.float32), device=c_dev.device)
-        if c_dev.is_cuda:
-            eff_backend = _resolve_backend(c_dev.device, self.backend)
-            labels_t, sq_t = assign_gpu(xt, c_dev, backend=eff_backend, dtype_mode=self.dtype)
-        else:
-            labels_t, sq_t = tiled_assign(
-                xt,
-                c_dev,
-                tile_rows=int(self.assign_tile_rows),
-                tile_cols=int(self.assign_tile_cols),
-            )
+        labels_t, sq_t = assign_clusters(
+            xt, c_dev, backend=self.backend, dtype=self.dtype,
+            tile_rows=int(self.assign_tile_rows), tile_cols=int(self.assign_tile_cols),
+        )
         return labels_t.cpu().numpy(), sq_t.cpu().numpy()
 
     def predict(self, X) -> np.ndarray:
