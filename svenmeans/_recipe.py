@@ -220,7 +220,7 @@ _FEISTEL_MULTIPLIERS = (
 
 
 def feistel_epoch_key(n: int, seed: int, epoch: int) -> tuple[int, tuple[int, ...]]:
-    """Return a deterministic key for a permutation over the next even bit-width.
+    """Return a deterministic key for a permutation over the nearest power-of-two domain.
 
     Six balanced Feistel rounds are not a cryptographic guarantee; they provide
     substantially more mixing than an affine-mod-n sweep, and stay bijective
@@ -232,27 +232,34 @@ def feistel_epoch_key(n: int, seed: int, epoch: int) -> tuple[int, tuple[int, ..
     if n == 1:
         return (1, (0,) * 6)
     width = max(2, (int(n) - 1).bit_length())
-    width += width & 1
     if width > 62:
         raise ValueError("Feistel shuffle supports at most 2**62 indices")
-    half = width // 2
+    half = (width + 1) // 2
     mix_seed = ((int(seed) & ((1 << 64) - 1))
                 ^ ((int(epoch) + 1) * 0x9E3779B97F4A7C15 & ((1 << 64) - 1)))
     rng = random.Random(mix_seed)
-    return half, tuple(rng.randrange(1 << half) for _ in range(6))
+    return width, tuple(rng.randrange(1 << half) for _ in range(6))
 
 
-def _feistel_permute(values: torch.Tensor, half: int, keys: tuple[int, ...]) -> torch.Tensor:
-    """A bijection of the 2**(2*half) integer domain, evaluated in parallel."""
-    mask = (1 << half) - 1
-    left = values >> half
-    right = values & mask
-    shift = max(1, half // 2)
+def _feistel_permute(values: torch.Tensor, width: int, keys: tuple[int, ...]) -> torch.Tensor:
+    """Bijectively permute 2**width values, even for odd width.
+
+    Unbalanced Feistel halves swap widths at every round; after six rounds,
+    the original field widths are restored. No full-domain lookup table is
+    needed, and every operation fits signed int64 for width <= 62.
+    """
+    right_bits = width // 2
+    left_bits = width - right_bits
+    left = values >> right_bits
+    right = values & ((1 << right_bits) - 1)
     for round_index, key in enumerate(keys):
-        mixed = ((right ^ key) * _FEISTEL_MULTIPLIERS[round_index]) & mask
-        mixed = mixed ^ (mixed >> shift)
-        left, right = right, (left ^ mixed) & mask
-    return (left << half) | right
+        left_mask = (1 << left_bits) - 1
+        right_mask = (1 << right_bits) - 1
+        mixed = ((right ^ (key & right_mask)) * _FEISTEL_MULTIPLIERS[round_index]) & left_mask
+        mixed = mixed ^ (mixed >> max(1, left_bits // 2))
+        left, right = right, (left ^ mixed) & left_mask
+        left_bits, right_bits = right_bits, left_bits
+    return (left << right_bits) | right
 
 
 def feistel_epoch_indices(
@@ -264,10 +271,10 @@ def feistel_epoch_indices(
 ) -> torch.Tensor:
     """Generate shuffled unique row indices for [begin, end), using O(end-begin) memory.
 
-    Cycle-walking restricts a power-of-four Feistel permutation to [0,n):
+    Cycle-walking restricts a power-of-two generalized Feistel permutation to [0,n):
     repeatedly apply the same permutation until the output is in range.
     This preserves bijectivity on [0,n), even for n that is not a power of 2.
-    Expected iterations are <4 for pseudorandom-looking permutations, but
+    Expected iterations are <2 for pseudorandom-looking permutations, but
     the worst case is unbounded by a small constant. Each batch remains
     deterministic and does not allocate an n-length index tensor.
     """
@@ -277,11 +284,11 @@ def feistel_epoch_indices(
         return torch.empty(0, dtype=torch.int64, device=device)
     if n == 1:
         return torch.zeros(end - begin, dtype=torch.int64, device=device)
-    half, keys = key
+    width, keys = key
     values = torch.arange(begin, end, dtype=torch.int64, device=device)
-    values = _feistel_permute(values, half, keys)
+    values = _feistel_permute(values, width, keys)
     pending = values >= n
     while bool(pending.any().item()):
-        values[pending] = _feistel_permute(values[pending], half, keys)
+        values[pending] = _feistel_permute(values[pending], width, keys)
         pending = values >= n
     return values
