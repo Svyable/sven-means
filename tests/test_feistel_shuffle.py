@@ -23,6 +23,11 @@ def test_bijection_on_non_power_of_two_domain(n, seed):
     )
 
 
+def test_odd_width_uses_minimum_domain():
+    width, _ = feistel_epoch_key(65, 0, 0)
+    assert width == 7  # M=128, not 256
+
+
 def test_per_epoch_seed_changes_order():
     n = 1025
     one = feistel_epoch_indices(n, 0, n, feistel_epoch_key(n, 7, 1), torch.device("cpu"))
