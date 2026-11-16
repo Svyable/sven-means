@@ -130,7 +130,7 @@ def fit_gpu(
     t0 = time.perf_counter()
 
     centroids = subsampled_d15_init(
-        x_in, k, seed=seed, rounds=cfg.init_rounds, power=cfg.init_power
+        x_in, k, seed=seed, rounds=cfg.init_rounds, power=cfg.init_power, max_samples=cfg.init_max_samples, tile_cols=cfg.init_tile_cols
     )
     usage = torch.full((k,), recipe.init_usage, dtype=torch.float32, device=device)
     sse_ema = torch.zeros(k, dtype=torch.float32, device=device)
