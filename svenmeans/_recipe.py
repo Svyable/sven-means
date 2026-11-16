@@ -1,6 +1,7 @@
 """Hyperparameter scaling rules, epoch budgeting, and subsampled D^1.5 seeding."""
 
 import math
+import random
 from dataclasses import dataclass
 from typing import List
 
@@ -24,6 +25,7 @@ class SMeansConfig:
     init_max_samples: int = 16384
     init_tile_cols: int = 128
     center_data: bool = False
+    shuffle_mode: str = "randperm"  # "feistel" trades some time for O(batch) shuffle memory
     assign_tile_rows: int = 512
     assign_tile_cols: int = 256
 
@@ -207,3 +209,79 @@ def subsampled_d15_init(
     if int(chosen.numel()) != k:
         raise RuntimeError("initializer did not generate k unique coreset indices")
     return xs[chosen].contiguous()
+
+
+# All multipliers are below 2**32, so (2**31 - 1) * multiplier
+# fits in signed int64. This permits up to a 62-bit Feistel domain.
+_FEISTEL_MULTIPLIERS = (
+    0x9E3779B1, 0x85EBCA77, 0xC2B2AE3D,
+    0x27D4EB2F, 0x165667B1, 0x7FEB352D,
+)
+
+
+def feistel_epoch_key(n: int, seed: int, epoch: int) -> tuple[int, tuple[int, ...]]:
+    """Return a deterministic key for a permutation over the next even bit-width.
+
+    Six balanced Feistel rounds are not a cryptographic guarantee; they provide
+    substantially more mixing than an affine-mod-n sweep, and stay bijective
+    by construction. Random epoch seeds do NOT imply a uniformly random
+    permutation from the n! possibilities.
+    """
+    if n < 1:
+        raise ValueError("n must be positive")
+    if n == 1:
+        return (1, (0,) * 6)
+    width = max(2, (int(n) - 1).bit_length())
+    width += width & 1
+    if width > 62:
+        raise ValueError("Feistel shuffle supports at most 2**62 indices")
+    half = width // 2
+    mix_seed = ((int(seed) & ((1 << 64) - 1))
+                ^ ((int(epoch) + 1) * 0x9E3779B97F4A7C15 & ((1 << 64) - 1)))
+    rng = random.Random(mix_seed)
+    return half, tuple(rng.randrange(1 << half) for _ in range(6))
+
+
+def _feistel_permute(values: torch.Tensor, half: int, keys: tuple[int, ...]) -> torch.Tensor:
+    """A bijection of the 2**(2*half) integer domain, evaluated in parallel."""
+    mask = (1 << half) - 1
+    left = values >> half
+    right = values & mask
+    shift = max(1, half // 2)
+    for round_index, key in enumerate(keys):
+        mixed = ((right ^ key) * _FEISTEL_MULTIPLIERS[round_index]) & mask
+        mixed = mixed ^ (mixed >> shift)
+        left, right = right, (left ^ mixed) & mask
+    return (left << half) | right
+
+
+def feistel_epoch_indices(
+    n: int,
+    begin: int,
+    end: int,
+    key: tuple[int, tuple[int, ...]],
+    device: torch.device,
+) -> torch.Tensor:
+    """Generate shuffled unique row indices for [begin, end), using O(end-begin) memory.
+
+    Cycle-walking restricts a power-of-four Feistel permutation to [0,n):
+    repeatedly apply the same permutation until the output is in range.
+    This preserves bijectivity on [0,n), even for n that is not a power of 2.
+    Expected iterations are <4 for pseudorandom-looking permutations, but
+    the worst case is unbounded by a small constant. Each batch remains
+    deterministic and does not allocate an n-length index tensor.
+    """
+    if n < 1 or not 0 <= begin <= end <= n:
+        raise ValueError("Require n>=1 and 0 <= begin <= end <= n")
+    if end == begin:
+        return torch.empty(0, dtype=torch.int64, device=device)
+    if n == 1:
+        return torch.zeros(end - begin, dtype=torch.int64, device=device)
+    half, keys = key
+    values = torch.arange(begin, end, dtype=torch.int64, device=device)
+    values = _feistel_permute(values, half, keys)
+    pending = values >= n
+    while bool(pending.any().item()):
+        values[pending] = _feistel_permute(values[pending], half, keys)
+        pending = values >= n
+    return values
