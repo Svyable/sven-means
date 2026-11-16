@@ -6,8 +6,8 @@ An affine modular permutation `(a*i+b)%n` is cheap but can preserve undesirable 
 
 ## Construction
 
-1. Choose the smallest *even* bit width `w` with `2**w >= n`. Define `M=2**w` and half-width `h=w/2`.
-2. Apply six keyed Feistel rounds to a logical position `i`. The result is a permutation of the full `[0,M)` space because a Feistel round is invertible irrespective of the round-function details.
+1. Choose the smallest bit width `w >= 2` with `2**w >= n`. Define `M=2**w`. When `w` is odd the Feistel halves have different bit widths and alternate positions each round.
+2. Apply six keyed generalized Feistel rounds to a logical position `i`. The result is a permutation of the full `[0,M)` space because a Feistel round is invertible irrespective of the round-function details.
 3. If the result is `>=n`, apply the **same** full-domain permutation again until it falls in `[0,n)`. This is cycle-walking.
 4. For successive batches, generate logical indices `begin:end` on the fly and apply the mapping.
 
@@ -15,7 +15,7 @@ An affine modular permutation `(a*i+b)%n` is cheap but can preserve undesirable 
 
 **Memory:** O(batch) extra indices per step, rather than O(n). This does not eliminate the need to hold a full dataset in the current CPU/GPU runner. It is groundwork for a future streaming API.
 
-**Statistical limitation:** This **is not** a uniformly random permutation over all `n!` possibilities, unlike `randperm`. Feistel round functions here are intentionally inexpensive and not audited cryptographic primitives. Adversarially ordered datasets might show bias, worse convergence, or poorer test MSE. The cycle walk's expected depth for well-mixed permutations is below 4 because `M/n<4`, but there is no small worst-case bound.
+**Statistical limitation:** This **is not** a uniformly random permutation over all `n!` possibilities, unlike `randperm`. Feistel round functions here are intentionally inexpensive and not audited cryptographic primitives. Adversarially ordered datasets might show bias, worse convergence, or poorer test MSE. The cycle walk's expected depth for well-mixed permutations is below 2 because `M/n<2`, but there is no small worst-case bound.
 
 **Speed limitation:** The implementation uses a GPU synchronization per cycle-walking check. Depending on batch size and hardware, ordinary `randperm` can be faster. This mode is opt-in, not a blanket upgrade.
 
