@@ -70,6 +70,7 @@ def fit_cpu(
     nepochs: float = 3.0,
     seed: int = 0,
     cfg: SMeansConfig = SMeansConfig(),
+    compute_labels: bool = True,
 ) -> Dict[str, Any]:
     """Fit s-means on CPU tensor `x` (shape `[n, d]`, float32)."""
     x_f = x.detach().to(dtype=torch.float32).contiguous()
@@ -88,7 +89,7 @@ def fit_cpu(
     t0 = time.perf_counter()
 
     centroids = subsampled_d15_init(
-        x_f, k, seed=seed, rounds=cfg.init_rounds, power=cfg.init_power
+        x_f, k, seed=seed, rounds=cfg.init_rounds, power=cfg.init_power, max_samples=cfg.init_max_samples, tile_cols=cfg.init_tile_cols
     ).to(dtype=torch.float32, device=device).contiguous()
     usage = torch.full((k,), recipe.init_usage, dtype=torch.float32, device=device)
     sse_ema = torch.zeros((k,), dtype=torch.float32, device=device)
@@ -231,20 +232,21 @@ def fit_cpu(
     pmean = (pass_sums / pass_counts.clamp_min(1.0)[:, None]).float()
     centroids = torch.where((pass_counts > 0)[:, None], w_fin[:, None] * pmean + (1.0 - w_fin[:, None]) * centroids, centroids)
 
-    # Full-dataset assignment for labels + exact inertia on fit
-    labels, sq_dists = tiled_assign(
-        x_f,
-        centroids,
-        x_norm=x_norm,
-        tile_rows=cfg.assign_tile_rows,
-        tile_cols=cfg.assign_tile_cols,
-    )
+    # Skip the full O(n*k*d) evaluation pass when only centroids are requested.
+    # The original CPU implementation executed this pass even if labels were disabled.
+    labels, inertia = None, None
+    if compute_labels:
+        labels, sq_dists = tiled_assign(
+            x_f, centroids, x_norm=x_norm,
+            tile_rows=cfg.assign_tile_rows, tile_cols=cfg.assign_tile_cols,
+        )
+        inertia = float(sq_dists.sum().item())
     t1 = time.perf_counter()
 
     return {
         "centroids": centroids,
         "labels": labels,
-        "inertia": float(sq_dists.sum().item()),
+        "inertia": inertia,
         "time_s": t1 - t0,
         "n_iter": int(step),
         "dead_clusters": int((pass_counts <= 0.5).sum().item()),
