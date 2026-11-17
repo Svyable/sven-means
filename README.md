@@ -57,6 +57,22 @@ To compare against the exact original s-means Python package, separately install
 - The optional CUDA/Triton route needs its own reproducible multi-GPU test matrix. No H100/billion-vector claims are made here.
 - The original implementation and its authors retain attribution; see [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
 
-## Research plan
+## Experimental cluster-local revival (CPU only)
+
+`SMeansConfig(revive_geometry="local_direction")` enables an alternative
+to the default global-variance perturbation. For each cluster, it streams
+a *single* covariance-vector product `E[r (r·q)]` along with projected
+absolute and squared residual moments, using `O(kd)` persistent state.
+The proposal `c ± ρq` is chosen using the conditional SSE-gain proxy
+`usage × max(0, 2ρ E|r·q| - ρ²)`. A cold/uninformative cluster is not
+split under this policy.
+
+This is an **experiment, not a recommended default**. The gain proxy is
+in-sample, based on changing centroids and directions; it does not prove a
+held-out improvement. No GPU/Triton implementation is claimed: requesting
+this mode on CUDA raises `NotImplementedError`. See
+[the mathematical design and limitations](docs/local-residual-revival.md)
+and run `python benchmarks/revival_study.py --kind all --seeds 5`.
+
 
 Run comparisons against upstream s-means and Meta e-means at equal wall clock and epochs; add real embedding/FAISS IVF recall benchmarks; explore localized residual-covariance splitting with ablations; establish GPU regression CI; only promote ideas that improve held-out quality without surprising memory/latency costs.

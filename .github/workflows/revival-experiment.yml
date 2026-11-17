@@ -1,0 +1,46 @@
+name: Experimental residual revival ablation
+on:
+  pull_request:
+    paths:
+      - 'svenmeans/**'
+      - 'tests/test_directional_revival.py'
+      - 'benchmarks/revival_study.py'
+      - '.github/workflows/revival-experiment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU research package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run mathematical and integration tests
+        run: python -m pytest -q tests/test_directional_revival.py
+      - name: Run paired held-out CPU ablation
+        run: |
+          python benchmarks/revival_study.py --kind all --n 6000 --d 32 --k 48 --epochs 2 --seeds 5 --threads 2 --output /tmp/revival.json > /dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('/tmp/revival.json').read_text())
+          print('Study is observational. Positive gain favors local_direction.')
+          for ds in report['datasets']:
+              print(f"{ds['kind']:12s} test-MSE gain {ds['mean_gain_pct']:+7.2f}%"
+                    f" | local wins {ds['local_wins']}/{len(ds['paired'])}"
+                    f" | median latency {ds['median_time_ratio']:.2f}x global")
+          PY
+      - name: Upload dataset-level paired results
+        uses: actions/upload-artifact@v4
+        with:
+          name: directional-revival-study
+          path: /tmp/revival.json
+          retention-days: 21
