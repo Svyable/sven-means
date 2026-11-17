@@ -92,6 +92,8 @@ def fit_cpu(
         raise ValueError("shuffle_mode must be 'randperm', 'feistel' or 'affine'")
     if cfg.revive_geometry not in ("global", "local_direction"):
         raise ValueError("revive_geometry must be 'global' or 'local_direction'")
+    if cfg.local_observe_every < 1:
+        raise ValueError("local_observe_every must be >= 1")
     epoch_rows = compute_epoch_rows(n, nepochs)
     total_steps = sum((rows + batch_size - 1) // batch_size for rows in epoch_rows)
 
@@ -177,7 +179,7 @@ def fit_cpu(
             batch_counts.scatter_add_(0, labels, torch.ones((b,), dtype=torch.float32, device=device))
             batch_sse.scatter_add_(0, labels, sq_dists)
 
-            if directional is not None:
+            if directional is not None and step % cfg.local_observe_every == 0:
                 directional.observe(xb, labels, centroids, batch_counts)
 
             frac = min(step, total_steps) / max(1, total_steps)
