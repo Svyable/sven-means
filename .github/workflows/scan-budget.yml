@@ -1,0 +1,51 @@
+name: Equal candidate scan-budget study
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/scan_budget.py'
+      - 'benchmarks/scan_budget_study.py'
+      - 'benchmarks/release_candidate.py'
+      - 'tests/test_scan_budget.py'
+      - '.github/workflows/scan-budget.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[dev]"
+      - name: Prove scan-budget invariants
+        run: python -m pytest -q tests/test_scan_budget.py
+      - name: Paired offline scan-budget comparison
+        run: python benchmarks/scan_budget_study.py --dataset all-offline --output /tmp/scan-offline.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sven-scan-budget-offline
+          path: /tmp/scan-offline.json
+          retention-days: 30
+  documents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[dev]"
+      - name: Real document-vector scan-budget comparison
+        run: python benchmarks/scan_budget_study.py --dataset news_lsa --output /tmp/scan-documents.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sven-scan-budget-documents
+          path: /tmp/scan-documents.json
+          retention-days: 30
