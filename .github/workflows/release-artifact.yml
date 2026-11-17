@@ -1,0 +1,87 @@
+name: Release artifact integrity
+on:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "svenmeans/**"
+      - "LICENSE"
+      - "NOTICE.md"
+      - "README.md"
+      - ".github/workflows/release-artifact.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-distributions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+      - name: Build isolated sdist and wheel
+        run: python -m build
+      - name: Check long-description metadata
+        run: python -m twine check --strict dist/*
+      - name: Check sdist attribution and version alignment
+        run: |
+          python - <<'PY'
+          import pathlib, tarfile, zipfile
+          import importlib.metadata as metadata
+          from packaging.version import Version
+
+          tarballs = list(pathlib.Path("dist").glob("*.tar.gz"))
+          wheels = list(pathlib.Path("dist").glob("*.whl"))
+          assert len(tarballs) == len(wheels) == 1, (tarballs, wheels)
+          with tarfile.open(tarballs[0]) as archive:
+              names = archive.getnames()
+              assert any(name.endswith("/LICENSE") for name in names)
+              assert any(name.endswith("/NOTICE.md") for name in names)
+              assert any(name.endswith("/README.md") for name in names)
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = archive.namelist()
+              assert any(name.endswith(".dist-info/METADATA") for name in names)
+              assert any(name.endswith("/LICENSE") for name in names)
+              assert any(name.endswith("/NOTICE.md") for name in names)
+              assert "svenmeans/_cpu.py" in names
+              assert "svenmeans/_directional.py" in names
+          print("Attribution and source presence confirmed")
+          PY
+      - name: Install built wheel with runtime dependencies
+        run: |
+          python -m pip install ".[dev]"
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+      - name: Verify installed version and CPU smoke
+        run: |
+          python - <<'PY'
+          from importlib.metadata import version
+          import torch
+          import svenmeans
+          assert svenmeans.__version__ == version("sven-means"), (
+              svenmeans.__version__, version("sven-means")
+          )
+          result = svenmeans.smeans(
+              torch.randn(250, 8, generator=torch.Generator().manual_seed(101)),
+              12, device="cpu", seed=3, nepochs=1.5, compute_labels=True,
+              return_info=True
+          )
+          assert result.centroids.shape == (12, 8)
+          assert result.labels.numel() == 250
+          assert result.inertia >= 0
+          print("Wheel import and functional smoke passed")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sven-means-alpha-distributions
+          path: dist/*
+          retention-days: 14
