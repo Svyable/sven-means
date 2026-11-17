@@ -7,6 +7,7 @@ from typing import Any, Dict, Tuple
 import torch
 
 from ._directional import DirectionalRevival
+from ._finalization import invalidate_split_statistics
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
@@ -275,6 +276,10 @@ def fit_cpu(
                         sse_ema[src] = hsse
                         if directional is not None:
                             directional.on_split(src, tgt)
+                        if is_last_pass and cfg.reset_pass_on_split:
+                            # A post-split center must not inherit the donor's
+                            # old single-center assignment mean.
+                            invalidate_split_statistics(pass_sums, pass_counts, src, tgt)
                         dirty_c = True
                         total_splits += n_sp
 

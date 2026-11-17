@@ -76,6 +76,10 @@ class SMeans(
         tracked EMA centroids for low-count clusters.
     pass_w_span : float, default=0.35
         Progressive weighting slope across batches in the final pass.
+    reset_pass_on_split : bool, default=False
+        Experimental: invalidate the source/target final-pass means when
+        reviving a centroid during the final epoch. May reduce pre/post-
+        split assignment contamination, but can also discard useful evidence.
     sse_decay : float, default=0.85
         Exponential moving average decay for per-cluster quantization SSE.
     var_beta : float, default=0.85
@@ -121,6 +125,7 @@ class SMeans(
         "donor_usage_w": [Interval(Real, 0.0, None, closed="left")],
         "eb_tau": [Interval(Real, 0.0, None, closed="left")],
         "pass_w_span": [Interval(Real, 0.0, 1.0, closed="both")],
+        "reset_pass_on_split": ["boolean"],
         "sse_decay": [Interval(Real, 0.0, 1.0, closed="neither")],
         "var_beta": [Interval(Real, 0.0, 1.0, closed="neither")],
         "init_rounds": [Interval(Integral, 2, None, closed="left")],
@@ -154,6 +159,7 @@ class SMeans(
         donor_usage_w: float = 0.35,
         eb_tau: float = 0.20,
         pass_w_span: float = 0.35,
+        reset_pass_on_split: bool = False,
         sse_decay: float = 0.85,
         var_beta: float = 0.85,
         init_rounds: int = 4,
@@ -183,6 +189,7 @@ class SMeans(
         self.donor_usage_w = donor_usage_w
         self.eb_tau = eb_tau
         self.pass_w_span = pass_w_span
+        self.reset_pass_on_split = reset_pass_on_split
         self.sse_decay = sse_decay
         self.var_beta = var_beta
         self.init_rounds = init_rounds
@@ -231,6 +238,7 @@ class SMeans(
             donor_usage_w=float(self.donor_usage_w),
             eb_tau=float(self.eb_tau),
             pass_w_span=float(self.pass_w_span),
+            reset_pass_on_split=bool(self.reset_pass_on_split),
             sse_decay=float(self.sse_decay),
             var_beta=float(self.var_beta),
             init_rounds=int(self.init_rounds),
