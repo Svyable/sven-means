@@ -51,11 +51,13 @@ def test_real_ivf_index_duplicate_cost_and_exact_full_scan(fraction, policy):
     assert index.ntotal == len(train) + len(rows)
     exact = faiss.IndexFlatL2(train.shape[1])
     exact.add(train)
-    truth = exact.search(test, 10)[1]
+    exact_sqdist, truth = exact.search(test, 10)
     report = evaluate_spill_index(
-        index, centers, test, truth, original_n=len(train), repeats=1
+        index, centers, test, truth, exact_sqdist,
+        original_n=len(train), repeats=1
     )
     assert report["storage_amplification"] == pytest.approx(1+fraction)
+    assert report["curve"][-1]["tie_aware_recall_at_10"] == pytest.approx(1.)
     assert report["curve"][-1]["recall_at_10"] == pytest.approx(1.)
     scanned = [x["mean_scanned_entries"] for x in report["curve"]]
     assert scanned == sorted(scanned)
