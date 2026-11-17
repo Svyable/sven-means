@@ -65,3 +65,28 @@ experimental option and document negative outcomes.
 A second phase must test 10+ independent source datasets, higher-dimensional
 pretrained embedding vectors, and a real FAISS IVF index with time-budget
 and memory Pareto curves before framing a broader public claim.
+
+
+## Stage A observed results: reset BOTH donor and revived target
+
+**Source:** [GitHub Actions paired self-improvement run 43999981232](https://github.com/Svyable/sven-means/actions/runs/43999981232). Each dataset has 2 independent training/test splits and 4 optimizer seeds, giving **8 paired trials** per revival policy. All figures below are mean changes against the current *same-geometry* carry-through control, not comparisons to Meta e-means.
+
+A negative MSE gain indicates worse held-out quantization error. Recall gains are **percentage points** in ideal coarse IVF candidate recall@10 with four centroid lists probed, not end-to-end FAISS recall/latency.
+
+| Dataset | Global MSE gain (%) | Global recall gain (points) | Local MSE gain (%) | Local recall gain (points) |
+|---|---:|---:|---:|---:|
+| Synthetic rotated | −0.173 | +0.013 | −0.001 | +0.000 |
+| Synthetic Zipf | −1.023 | +11.823 | −0.061 | −0.651 |
+| Real digits (train-only standardized) | −0.042 | +0.013 | −0.102 | −0.013 |
+| Real breast-cancer observations | −0.267 | +0.417 | −0.005 | +0.013 |
+| Real 20 Newsgroups TF-IDF/SVD vectors | −0.093 | +1.224 | +0.009 | +0.078 |
+
+**Decision:** the original hypothesis that resetting both indices improves mean held-out MSE is **not supported**. Global reset lost MSE on all five test families, with zero of eight MSE wins for both the rotated and Zipf cases. The Zipf candidate-recall increase is striking but is specific to a synthetic skewed distribution; the document-vector improvement is much smaller. Retain the policy **opt-in only**, do not claim a general accuracy win, and do not publish a production release of this experiment without GPU validation.
+
+**New hypothesis generated after observing Stage A (must be tested separately):** resetting the donor discards legitimate final-pass history while resetting the revived target may remove genuinely stale evidence. Compare `target_only` against both carry-through and reset-both, on the same paired protocol, without changing the default. This is a post-hoc follow-up and **not** a preregistered Stage A outcome.
+
+### Additional limitations
+
+- The “20 Newsgroups embeddings” are 96D latent semantic analysis vectors, **not pretrained neural embeddings**.
+- Candidate recall measures a coarse assignment property with exact baseline neighbors and fixed probe count; it does not account for index build time, scan cost, actual FAISS quantization configuration, or query latency.
+- Numeric CPU timing depends on shared GitHub runners; full records, data hashes and environment versions are retained as workflow artifacts.
