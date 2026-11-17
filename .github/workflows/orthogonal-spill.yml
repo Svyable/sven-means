@@ -1,0 +1,98 @@
+name: SOAR-inspired selective spill with real FAISS IVF
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/orthogonal_spill.py'
+      - 'benchmarks/orthogonal_spill_study.py'
+      - 'tests/test_orthogonal_spill.py'
+      - '.github/workflows/orthogonal-spill.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ivf-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install faiss and package
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Verify real duplicate-aware IVF full-scan recall
+        run: python -m pytest -q tests/test_orthogonal_spill.py
+
+  lsa-documents:
+    needs: ivf-invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin upstream Meta FAIR NumpyEmeans source
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package + pinned FAISS wheel
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Real LSA vectors, 4 centroid baselines, 7 routing choices
+        run: |
+          python -m benchmarks.orthogonal_spill_study --dataset news_lsa --output /tmp/orthogonal-lsa.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orthogonal-spill-lsa
+          path: /tmp/orthogonal-lsa.json
+          retention-days: 30
+
+  synthetic-controls:
+    needs: ivf-invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin upstream Meta FAIR NumpyEmeans source
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package + pinned FAISS wheel
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Rotated and Zipf synthetic stress tests
+        run: |
+          python -m benchmarks.orthogonal_spill_study --dataset rotated --output /tmp/orthogonal-rotated.json
+          python -m benchmarks.orthogonal_spill_study --dataset zipf --output /tmp/orthogonal-zipf.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orthogonal-spill-synthetics
+          path: |
+            /tmp/orthogonal-rotated.json
+            /tmp/orthogonal-zipf.json
+          retention-days: 30

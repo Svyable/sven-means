@@ -109,6 +109,18 @@ the streaming sign-gradient of the former and retains O(kd) state.
 [Experiment 010](docs/experiments/objective-direction.md) for controlled
 comparisons, limitations and reasons to keep the existing default.
 
+## Experimental budgeted SOAR-style IVF redundancy
+
+[Experiment 011](docs/experiments/orthogonal-spill.md) evaluates
+opt-in, index-only secondary assignments for coarse FAISS IVF lists.
+It compares a SOAR-inspired orthogonal-residual scoring rule with
+ordinary second-nearest spilling and random storage-matched controls,
+using **real** FAISS IVF-Flat recall, duplicate-aware search, exact
+nearest-neighbor ground truth, measured memory, and equal entries
+scanned. **SOAR is Google's NeurIPS 2023 method, not invented here.**
+The normal `svenmeans` clustering algorithm and default interface
+do not change.
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
