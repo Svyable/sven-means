@@ -94,6 +94,8 @@ def fit_cpu(
         raise ValueError("revive_geometry must be 'global' or 'local_direction'")
     if cfg.local_observe_every < 1:
         raise ValueError("local_observe_every must be >= 1")
+    if cfg.local_radius_policy not in ("rms_scaled", "mean_abs"):
+        raise ValueError("local_radius_policy must be 'rms_scaled' or 'mean_abs'")
     epoch_rows = compute_epoch_rows(n, nepochs)
     total_steps = sum((rows + batch_size - 1) // batch_size for rows in epoch_rows)
 
@@ -230,6 +232,7 @@ def fit_cpu(
                         src, delta = directional.propose(
                             donors, max_splits, usage, cfg.split_mult,
                             cfg.local_gain_floor,
+                            cfg.local_radius_policy,
                         )
                         n_sp = int(src.numel())
                     else:
