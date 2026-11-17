@@ -6,6 +6,7 @@ from typing import Any, Dict, Tuple
 
 import torch
 
+from ._directional import DirectionalRevival
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
@@ -89,6 +90,12 @@ def fit_cpu(
     unused_thresh = recipe.unused_thresh
     if cfg.shuffle_mode not in ("randperm", "feistel", "affine"):
         raise ValueError("shuffle_mode must be 'randperm', 'feistel' or 'affine'")
+    if cfg.revive_geometry not in ("global", "local_direction"):
+        raise ValueError("revive_geometry must be 'global' or 'local_direction'")
+    if cfg.local_observe_every < 1:
+        raise ValueError("local_observe_every must be >= 1")
+    if cfg.local_radius_policy not in ("rms_scaled", "mean_abs"):
+        raise ValueError("local_radius_policy must be 'rms_scaled' or 'mean_abs'")
     epoch_rows = compute_epoch_rows(n, nepochs)
     total_steps = sum((rows + batch_size - 1) // batch_size for rows in epoch_rows)
 
@@ -106,6 +113,14 @@ def fit_cpu(
     batch_sums = torch.empty((k, d), dtype=torch.float32, device=device)
     batch_counts = torch.empty((k,), dtype=torch.float32, device=device)
     batch_sse = torch.empty((k,), dtype=torch.float32, device=device)
+
+    directional = (
+        DirectionalRevival(
+            k, d, seed=seed, device=device, beta=cfg.local_beta,
+            min_observations=cfg.local_min_observations,
+        )
+        if cfg.revive_geometry == "local_direction" else None
+    )
 
     rev_gen = make_generator(device, seed)
     c_norm = (centroids * centroids).sum(dim=1)
@@ -166,6 +181,9 @@ def fit_cpu(
             batch_counts.scatter_add_(0, labels, torch.ones((b,), dtype=torch.float32, device=device))
             batch_sse.scatter_add_(0, labels, sq_dists)
 
+            if directional is not None and step % cfg.local_observe_every == 0:
+                directional.observe(xb, labels, centroids, batch_counts)
+
             frac = min(step, total_steps) / max(1, total_steps)
             alpha = alpha0 * (0.06 + 0.94 * (0.5 * (1.0 + math.cos(math.pi * frac))) ** 0.92)
             pfrac = (s_ep + 0.5) / max(1, steps_in_ep)
@@ -200,46 +218,65 @@ def fit_cpu(
             sse_ema.mul_(cfg.sse_decay).add_(batch_sse, alpha=1.0 - cfg.sse_decay)
             dirty_c = True
 
-            # Distortion-aware anisotropic dead-cluster revival every check_every steps
+            # Revival has two controlled options:
+            #   global: exact legacy distortion- and global-variance policy.
+            #   local_direction: rank-one streaming residual geometry, scored
+            #       by estimated per-donor gain from a symmetric pair split.
             if ((step + 1) % check_every == 0) and (step <= revive_stop_step):
                 thresh = float(usage.sum().item()) * unused_thresh / max(1, k)
                 unused = usage < thresh
                 donors = (~unused) & (usage > 0.0)
-                n_sp = min(int(unused.sum().item()), int(donors.sum().item()))
-                if n_sp > 0:
-                    has_sse = float(sse_ema.max().item()) > 0.0
-                    score_vec = (
-                        sse_ema.clamp_min(1e-12) * (usage.clamp_min(1e-12) ** cfg.donor_usage_w)
-                        if has_sse
-                        else usage
-                    )
-                    u_rand = torch.rand((k,), dtype=usage.dtype, device=device, generator=rev_gen).clamp_min(
-                        torch.finfo(usage.dtype).tiny
-                    )
-                    keys = torch.where(donors, score_vec.clamp_min(1e-30).log() - (-u_rand.log()).log(), float("-inf"))
-                    src = torch.topk(keys, n_sp).indices
-                    tgt = torch.nonzero(unused, as_tuple=True)[0][:n_sp]
+                max_splits = min(int(unused.sum().item()), int(donors.sum().item()))
+                if max_splits > 0:
+                    if directional is not None:
+                        src, delta = directional.propose(
+                            donors, max_splits, usage, cfg.split_mult,
+                            cfg.local_gain_floor,
+                            cfg.local_radius_policy,
+                        )
+                        n_sp = int(src.numel())
+                    else:
+                        n_sp = max_splits
+                        has_sse = float(sse_ema.max().item()) > 0.0
+                        score_vec = (
+                            sse_ema.clamp_min(1e-12) * (usage.clamp_min(1e-12) ** cfg.donor_usage_w)
+                            if has_sse
+                            else usage
+                        )
+                        u_rand = torch.rand((k,), dtype=usage.dtype, device=device, generator=rev_gen).clamp_min(
+                            torch.finfo(usage.dtype).tiny
+                        )
+                        keys = torch.where(
+                            donors, score_vec.clamp_min(1e-30).log() - (-u_rand.log()).log(), float("-inf")
+                        )
+                        src = torch.topk(keys, n_sp).indices
+                        fvec = feat_scale.clamp_min(1e-10).sqrt()
+                        fvec = fvec / fvec.norm().clamp_min(1e-8) * math.sqrt(float(d))
+                        rad = cfg.split_mult * (
+                            sse_ema[src] / usage[src].clamp_min(1e-6) / max(1, d)
+                        ).clamp_min(1e-10).sqrt()[:, None]
+                        radem = torch.where(
+                            torch.rand((n_sp, d), device=device, generator=rev_gen) < 0.5,
+                            -1.0,
+                            1.0,
+                        )
+                        delta = rad * radem * fvec[None, :]
 
-                    fvec = feat_scale.clamp_min(1e-10).sqrt()
-                    fvec = fvec / fvec.norm().clamp_min(1e-8) * math.sqrt(float(d))
-                    dc = centroids[src]
-                    half = 0.5 * usage[src]
-                    rad = cfg.split_mult * (sse_ema[src] / usage[src].clamp_min(1e-6) / max(1, d)).clamp_min(1e-10).sqrt()[:, None]
-                    radem = torch.where(
-                        torch.rand((n_sp, d), device=device, generator=rev_gen) < 0.5,
-                        -1.0,
-                        1.0,
-                    )
-                    delta = rad * radem * fvec[None, :]
-                    centroids[tgt] = dc + delta
-                    centroids[src] = dc - delta
-                    usage[tgt] = half
-                    usage[src] = half
-                    hsse = 0.5 * sse_ema[src]
-                    sse_ema[tgt] = hsse
-                    sse_ema[src] = hsse
-                    dirty_c = True
-                    total_splits += n_sp
+                    if n_sp > 0:
+                        tgt = torch.nonzero(unused, as_tuple=True)[0][:n_sp]
+                        dc = centroids[src].clone()
+                        half = 0.5 * usage[src]
+                        centroids[tgt] = dc + delta
+                        centroids[src] = dc - delta
+                        usage[tgt] = half
+                        usage[src] = half
+                        hsse = 0.5 * sse_ema[src]
+                        sse_ema[tgt] = hsse
+                        sse_ema[src] = hsse
+                        if directional is not None:
+                            directional.on_split(src, tgt)
+                        dirty_c = True
+                        total_splits += n_sp
 
             step += 1
 

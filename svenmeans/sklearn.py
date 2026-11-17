@@ -55,6 +55,20 @@ class SMeans(
         Fraction of the total step budget after which dead-cluster revival stops.
     split_mult : float, default=0.55
         Perturbation radius multiplier scaled by local per-cluster RMS distortion.
+    revive_geometry : {"global", "local_direction"}, default="global"
+        Experimental CPU-only covariance-vector split proposals; default uses
+        upstream global-variance random perturbations.
+    local_beta : float, default=0.85
+        Direction and projected-moment exponential smoothing.
+    local_min_observations : int, default=16
+        Minimum cumulative assigned observations before proposing a local split.
+    local_observe_every : int, default=4
+        Number of mini-batches between experimental sketch updates.
+    local_gain_floor : float, default=0.0
+        Minimum projected per-row SSE-gain proxy for accepting a donor.
+    local_radius_policy : {"rms_scaled", "mean_abs"}, default="rms_scaled"
+        The experimental mean_abs policy uses the optimal fixed-direction,
+        fixed-assignment symmetric split distance; not guaranteed globally.
     donor_usage_w : float, default=0.35
         Weight blending SSE and usage in stochastic donor selection.
     eb_tau : float, default=0.20
@@ -98,6 +112,12 @@ class SMeans(
         "revive_thresh": [Interval(Real, 0.0, 1.0, closed="both")],
         "revive_stop_frac": [Interval(Real, 0.0, 1.0, closed="both")],
         "split_mult": [Interval(Real, 0.0, None, closed="left")],
+        "revive_geometry": [StrOptions({"global", "local_direction"})],
+        "local_beta": [Interval(Real, 0.0, 1.0, closed="left")],
+        "local_min_observations": [Interval(Integral, 1, None, closed="left")],
+        "local_observe_every": [Interval(Integral, 1, None, closed="left")],
+        "local_gain_floor": [Interval(Real, 0.0, None, closed="left")],
+        "local_radius_policy": [StrOptions({"rms_scaled", "mean_abs"})],
         "donor_usage_w": [Interval(Real, 0.0, None, closed="left")],
         "eb_tau": [Interval(Real, 0.0, None, closed="left")],
         "pass_w_span": [Interval(Real, 0.0, 1.0, closed="both")],
@@ -125,6 +145,12 @@ class SMeans(
         revive_thresh: float = 0.1,
         revive_stop_frac: float = 0.85,
         split_mult: float = 0.55,
+        revive_geometry: str = "global",
+        local_beta: float = 0.85,
+        local_min_observations: int = 16,
+        local_observe_every: int = 4,
+        local_gain_floor: float = 0.0,
+        local_radius_policy: str = "rms_scaled",
         donor_usage_w: float = 0.35,
         eb_tau: float = 0.20,
         pass_w_span: float = 0.35,
@@ -148,6 +174,12 @@ class SMeans(
         self.revive_thresh = revive_thresh
         self.revive_stop_frac = revive_stop_frac
         self.split_mult = split_mult
+        self.revive_geometry = revive_geometry
+        self.local_beta = local_beta
+        self.local_min_observations = local_min_observations
+        self.local_observe_every = local_observe_every
+        self.local_gain_floor = local_gain_floor
+        self.local_radius_policy = local_radius_policy
         self.donor_usage_w = donor_usage_w
         self.eb_tau = eb_tau
         self.pass_w_span = pass_w_span
@@ -190,6 +222,12 @@ class SMeans(
             revive_thresh=float(self.revive_thresh),
             revive_stop_frac=float(self.revive_stop_frac),
             split_mult=float(self.split_mult),
+            revive_geometry=self.revive_geometry,
+            local_beta=float(self.local_beta),
+            local_min_observations=int(self.local_min_observations),
+            local_observe_every=int(self.local_observe_every),
+            local_gain_floor=float(self.local_gain_floor),
+            local_radius_policy=self.local_radius_policy,
             donor_usage_w=float(self.donor_usage_w),
             eb_tau=float(self.eb_tau),
             pass_w_span=float(self.pass_w_span),
