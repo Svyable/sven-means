@@ -1,8 +1,10 @@
 """Experimental cluster-local, rank-one residual geometry for dead-centroid revival.
 
-Maintains one streaming covariance-vector sketch and two scalar residual
-moments per centroid, not a full d-by-d covariance matrix. This module is
-CPU-only until CUDA and Triton implementations are independently tested.
+Maintains a streaming direction-gradient sketch and two scalar residual
+moments per centroid, not a full d-by-d covariance matrix. Covariance
+power iteration is the historical default; the experimental "split_gain"
+direction follows the gradient of the *actual symmetric split objective*.
+This module is CPU-only until CUDA and Triton are independently tested.
 """
 from __future__ import annotations
 
@@ -19,9 +21,14 @@ class DirectionalRevival:
     which learns a principal residual direction without O(k*d*d) memory.
 
     Splitting one donor into c+rho*q and c-rho*q changes its conditional SSE
-    by (2*rho*|z| - rho**2) per assigned point. The EMA of this quantity is
-    a *proxy*: assignments, centroids, and directions continue changing.
-    It is not a certified gain on unseen points.
+    by (2*rho*|z| - rho**2) per assigned point. For optimal radius rho=E|z|,
+    the gain is (E|z|)^2. Hence the objective-aligned unit-vector gradient
+    is g=E[sign(r.q)*r], NOT the covariance power direction g=E[(r.q)*r].
+    Both are classic PCA-like methods; the integrated split policy, not the
+    underlying L1 principal-component idea, is being experimentally tested.
+
+    EMA moments are an in-sample moving proxy; shifting assignments and
+    centroids invalidate guarantees about unseen points.
     """
 
     def __init__(
@@ -33,9 +40,13 @@ class DirectionalRevival:
         device: torch.device,
         beta: float = 0.85,
         min_observations: int = 16,
+        direction_objective: str = "covariance",
     ) -> None:
         if k < 1 or d < 1 or not 0.0 <= beta < 1.0 or min_observations < 1:
             raise ValueError("k,d,min_observations >= 1 and 0 <= beta < 1 required")
+        if direction_objective not in ("covariance", "split_gain"):
+            raise ValueError("direction_objective must be 'covariance' or 'split_gain'")
+        self.direction_objective = direction_objective
         self.beta = float(beta)
         self.min_observations = int(min_observations)
 
@@ -64,18 +75,46 @@ class DirectionalRevival:
         Only centroids touched in this batch update their estimates.
         """
         residual = xb.float() - centroids[labels].float()
-        projection = (residual * self.q[labels]).sum(dim=1)
+        previous_projection = (residual * self.q[labels]).sum(dim=1)
         self._cov_q.zero_()
-        self._abs_sum.zero_()
-        self._sq_sum.zero_()
-        self._cov_q.index_add_(0, labels, residual * projection[:, None])
-        self._abs_sum.scatter_add_(0, labels, projection.abs())
-        self._sq_sum.scatter_add_(0, labels, projection.square())
-
         touched = counts > 0
         if not bool(touched.any().item()):
             return
         denom = counts[touched].clamp_min(1)
+
+        # The historical covariance power iteration is g=E[r*(r.q)].
+        # The split-gain objective G(q)=(E|r.q|)^2 has tangent gradient
+        # proportional to E[sign(r.q)*r] for nonzero projections.
+        weight = (
+            previous_projection.sign()
+            if self.direction_objective == "split_gain"
+            else previous_projection
+        )
+        self._cov_q.index_add_(0, labels, residual * weight[:, None])
+        previous = self.q[touched]
+        gradient = self._cov_q[touched] / denom[:, None]
+        norm = gradient.norm(dim=1, keepdim=True)
+        candidate = torch.where(
+            norm > 1e-12, gradient / norm.clamp_min(1e-12), previous
+        )
+        mixed = self.beta * previous + (1.0 - self.beta) * candidate
+        mixed_norm = mixed.norm(dim=1, keepdim=True)
+        self.q[touched] = torch.where(
+            mixed_norm > 1e-12, mixed / mixed_norm.clamp_min(1e-12), previous
+        )
+
+        # For the split-gain variant, measure projected moments ALONG THE
+        # UPDATED DIRECTION, not the stale pre-update projection. This extra
+        # O(batch*d) operation is charged by the benchmark. Preserve the
+        # original historical covariance path using pre-update projections.
+        if self.direction_objective == "split_gain":
+            projection = (residual * self.q[labels]).sum(dim=1)
+        else:
+            projection = previous_projection
+        self._abs_sum.zero_()
+        self._sq_sum.zero_()
+        self._abs_sum.scatter_add_(0, labels, projection.abs())
+        self._sq_sum.scatter_add_(0, labels, projection.square())
         self.observed[touched] += counts[touched]
         self.mean_abs[touched] = (
             self.beta * self.mean_abs[touched]
@@ -84,22 +123,6 @@ class DirectionalRevival:
         self.mean_sq[touched] = (
             self.beta * self.mean_sq[touched]
             + (1.0 - self.beta) * self._sq_sum[touched] / denom
-        )
-
-        # Normalizing Cq before blending makes the update independent of
-        # physical units; Cq retains off-diagonal covariance information.
-        previous = self.q[touched]
-        cov_vec = self._cov_q[touched] / denom[:, None]
-        cov_norm = cov_vec.norm(dim=1, keepdim=True)
-        # Empty/zero-residual batches must not erase the unit direction,
-        # especially when beta=0 (otherwise zero becomes an absorbing state).
-        candidate = torch.where(
-            cov_norm > 1e-12, cov_vec / cov_norm.clamp_min(1e-12), previous
-        )
-        mixed = self.beta * previous + (1.0 - self.beta) * candidate
-        mixed_norm = mixed.norm(dim=1, keepdim=True)
-        self.q[touched] = torch.where(
-            mixed_norm > 1e-12, mixed / mixed_norm.clamp_min(1e-12), previous
         )
 
     @torch.no_grad()

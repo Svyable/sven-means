@@ -102,6 +102,8 @@ def fit_cpu(
         raise ValueError("revive_abandon_epochs must be finite and > 0")
     if cfg.local_observe_every < 1:
         raise ValueError("local_observe_every must be >= 1")
+    if cfg.local_direction_objective not in ("covariance", "split_gain"):
+        raise ValueError("local_direction_objective must be 'covariance' or 'split_gain'")
     if cfg.local_radius_policy not in ("rms_scaled", "mean_abs"):
         raise ValueError("local_radius_policy must be 'rms_scaled' or 'mean_abs'")
     epoch_rows = compute_epoch_rows(n, nepochs)
@@ -138,6 +140,7 @@ def fit_cpu(
         DirectionalRevival(
             k, d, seed=seed, device=device, beta=cfg.local_beta,
             min_observations=cfg.local_min_observations,
+            direction_objective=cfg.local_direction_objective,
         )
         if cfg.revive_geometry == "local_direction" else None
     )
