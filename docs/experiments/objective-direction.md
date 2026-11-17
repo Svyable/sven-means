@@ -25,7 +25,11 @@ Our existing streaming direction update instead follows
 E[r*(r.q)] = E[rr^T]q, the covariance power-iteration
 direction maximizing **E[(r.q)²]**. This is only a surrogate:
 a rare high-leverage residual can dominate the squared objective but
-need not provide the best split gain.
+need not provide the best split gain. By Jensen/Cauchy,
+`(E|r.q|)^2 <= E[(r.q)^2]`; this *upper bound* may be very loose for
+heavy-tailed projected residuals. The sign-gradient aligns with the
+fixed-assignment split objective, not automatically with evolving
+online cluster assignments.
 
 At nonzero projection, the (sub)gradient of E|r.q| with respect to
 q is **E[sign(r.q)*r]**. We add this streaming sign-gradient
@@ -37,7 +41,11 @@ statistics in the proposed split radius. This costs an additional
 O(batch*d) per sampled sketch update; wall time is measured.
 
 The sign-gradient generalized-power idea belongs to earlier
-**L1 PCA / robust subspace** research. We make no claim of a new
+**L1 PCA / robust subspace** research, notably Nojun Kwak,
+["Principal component analysis based on L1-norm maximization"
+(IEEE TPAMI, 2008)](https://doi.org/10.1109/TPAMI.2008.114).
+The fixed-point update `q <- normalize(sum_i r_i sign(r_i.q))`
+is not original here. We make no claim of a new
 global optimizer, convex objective, guaranteed descent, or novel
 L1-PCA theory. The same nonconvex and changing-assignment limitations
 apply.
@@ -91,3 +99,29 @@ art, Weiss (2026) rare-center protection, and Sven implementation.
 Do not claim the sign-gradient is a globally optimal split direction,
 that its EMA estimates are unbiased under nonstationary centroids, or
 that one experimental synthetic result constitutes a paper.
+
+
+## Observed CPU study (November 17, 2026 UTC)
+
+[GitHub Actions 44023347813](https://github.com/Svyable/sven-means/actions/runs/44023347813) passed the exact-gradient/zero-projection/determinism tests and both paired benchmark jobs. Two independently generated dataset selections × four optimizer seeds (**8 paired fits per workload**) were compared with **current local covariance direction + RMS radius** on identical data.
+
+The table reports **mean held-out nearest-centroid SSE improvement** for each alternative relative to that current experimental mode (positive is better, negative worse):
+
+| Workload | Covariance + mean-abs radius | Sign-gradient + RMS radius | Sign-gradient + mean-abs radius | Sign-gradient+mean-abs recall@10 gain at 10% expected scan |
+|---|---:|---:|---:|---:|
+| Rotated synthetic | −0.008% | −0.013% | **−0.023%** | −0.024 pp |
+| Zipf synthetic | +0.000% | −0.034% | **−0.036%** | +0.512 pp |
+| Real standardized digits | +0.005% | −0.155% | **−0.118%** | +0.108 pp |
+| Real breast-cancer features | +0.001% | +0.040% | **+0.037%** | +0.015 pp |
+| Rare isolated synthetic groups | +1.599% | **−14.440%** | **−22.757%** | −0.005 pp |
+| Real 20 Newsgroups LSA document vectors | −0.162% | −0.210% | **−0.275%** | +0.536 pp |
+
+The sign-gradient typically adds ~1–2% of the *already slower local* CPU fit time at the default four-batch observation cadence. The recall metric above is **ideal coarse IVF candidate-neighbor inclusion**, not actual FAISS index recall or search latency. Full per-seed rows, source-array hashes, split counts and measured fit times are archived as JSON in CI.
+
+### Falsification and explanation
+
+The proposed L1/sign-gradient direction is mathematically better aligned with the **frozen-cluster** symmetric split objective and passes its controlled heavy-tail unit example. **It did not improve held-out clustering accuracy consistently.** On rare islands it was substantially worse than our covariance direction; on LSA documents it traded a small candidate-recall improvement for worse SSE. This is the opposite of a broad Pareto win.
+
+A plausible failure mechanism is *nonstationarity*: the unit gradient is estimated from batches assigned to changing centers and changing cluster labels. The on-the-fly predicted split gain is conditional on the old donor assignments and does not account for displacing a rare revived-target cluster; exactness of the fixed-label identity does not imply a trustworthy streaming decision. The experiment cannot causally distinguish these explanations yet.
+
+**Decision: do not change any defaults, do not call this a new method or a publishable result.** Retain the sign-gradient mode only as a clearly labeled exploratory control with Kwak (2008) attribution. Future theory should account for **net replacement cost** of the recycled centroid, not just local donor gain. A next experiment needs independently held-out pretrained neural inputs and actual FAISS/Meta baselines if any approach improves on development data.
