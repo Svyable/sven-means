@@ -62,6 +62,8 @@ class SMeans(
         Direction and projected-moment exponential smoothing.
     local_min_observations : int, default=16
         Minimum cumulative assigned observations before proposing a local split.
+    local_observe_every : int, default=1
+        Number of mini-batches between experimental sketch updates.
     local_gain_floor : float, default=0.0
         Minimum projected per-row SSE-gain proxy for accepting a donor.
     donor_usage_w : float, default=0.35
@@ -110,6 +112,7 @@ class SMeans(
         "revive_geometry": [StrOptions({"global", "local_direction"})],
         "local_beta": [Interval(Real, 0.0, 1.0, closed="left")],
         "local_min_observations": [Interval(Integral, 1, None, closed="left")],
+        "local_observe_every": [Interval(Integral, 1, None, closed="left")],
         "local_gain_floor": [Interval(Real, 0.0, None, closed="left")],
         "donor_usage_w": [Interval(Real, 0.0, None, closed="left")],
         "eb_tau": [Interval(Real, 0.0, None, closed="left")],
@@ -141,6 +144,7 @@ class SMeans(
         revive_geometry: str = "global",
         local_beta: float = 0.85,
         local_min_observations: int = 16,
+        local_observe_every: int = 1,
         local_gain_floor: float = 0.0,
         donor_usage_w: float = 0.35,
         eb_tau: float = 0.20,
@@ -168,6 +172,7 @@ class SMeans(
         self.revive_geometry = revive_geometry
         self.local_beta = local_beta
         self.local_min_observations = local_min_observations
+        self.local_observe_every = local_observe_every
         self.local_gain_floor = local_gain_floor
         self.donor_usage_w = donor_usage_w
         self.eb_tau = eb_tau
@@ -214,6 +219,7 @@ class SMeans(
             revive_geometry=self.revive_geometry,
             local_beta=float(self.local_beta),
             local_min_observations=int(self.local_min_observations),
+            local_observe_every=int(self.local_observe_every),
             local_gain_floor=float(self.local_gain_floor),
             donor_usage_w=float(self.donor_usage_w),
             eb_tau=float(self.eb_tau),
