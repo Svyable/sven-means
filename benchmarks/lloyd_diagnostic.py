@@ -66,10 +66,12 @@ def lloyd_trace(train: np.ndarray, initial_centers: np.ndarray, steps: int = 2):
         start = time.perf_counter()
         label, sqdist = assign_faiss(x, c)
         if step == 0:
+            initial_assignment_ms = (time.perf_counter() - start) * 1000
+            # Reporting "zero refinement" must charge nothing to base fit.
+            # The first Lloyd update, however, requires this assignment.
             total_ms = 0.
         else:
-            # Charge the current-step assignment; the previous update is
-            # already included in the stopwatch for that previous iteration.
+            # Subsequent assignments belong to their preceding update.
             total_ms += (time.perf_counter() - start) * 1000
         out.append({
             "steps": step,
@@ -80,6 +82,8 @@ def lloyd_trace(train: np.ndarray, initial_centers: np.ndarray, steps: int = 2):
         })
         if step == steps:
             break
+        if step == 0:
+            total_ms += initial_assignment_ms
         began = time.perf_counter()
         sums = np.zeros_like(c, dtype=np.float64)
         np.add.at(sums, label, x.astype(np.float64, copy=False))
