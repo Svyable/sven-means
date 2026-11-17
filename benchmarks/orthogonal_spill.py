@@ -216,6 +216,7 @@ def evaluate_spill_index(
     centers: np.ndarray,
     queries: np.ndarray,
     truth: np.ndarray,
+    exact_sqdist: np.ndarray,
     *,
     probes: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64),
     repeats: int = 3,
@@ -226,8 +227,12 @@ def evaluate_spill_index(
         raise ValueError("repeats and original_n must be positive")
     centers = np.ascontiguousarray(centers, dtype=np.float32)
     queries = np.ascontiguousarray(queries, dtype=np.float32)
-    if queries.shape[0] != truth.shape[0] or truth.shape[1] < NEIGHBORS:
-        raise ValueError("truth shape must match query count and top 10")
+    if (queries.shape[0] != truth.shape[0]
+            or truth.shape[1] < NEIGHBORS
+            or exact_sqdist.shape != truth.shape):
+        raise ValueError("truth ID/distance shapes must match queries and top 10")
+    if not np.isfinite(exact_sqdist).all():
+        raise ValueError("reference distances must be finite")
     qindex = faiss.IndexFlatL2(centers.shape[1])
     qindex.add(centers)
     lengths = np.array(
@@ -247,32 +252,71 @@ def evaluate_spill_index(
         index.search(queries, 2*NEIGHBORS)
         elapsed = []
         retrieved = None
+        found_dist = None
         for _ in range(repeats):
             started = time.perf_counter()
-            _, retrieved = index.search(queries, 2*NEIGHBORS)
+            found_dist, retrieved = index.search(queries, 2*NEIGHBORS)
             elapsed.append(
                 1000.*(time.perf_counter()-started)/len(queries)
             )
-        recall = float(np.mean([
-            len(set(int(x) for x in truth[i, :NEIGHBORS]).intersection(
-                deduplicate_ranked_ids(retrieved[i])
-            )) / NEIGHBORS
-            for i in range(len(queries))
-        ]))
+        assert found_dist is not None and retrieved is not None
+
+        # In some real vector sets, exactly tied distances can make
+        # IndexFlatL2 and IndexIVFFlat return different equally-valid IDs
+        # at the boundary of top10. Therefore standard ID-recall may
+        # be <1 even when all lists are scanned. Keep it as raw evidence,
+        # while using the same explicit distance-tie-aware reference
+        # threshold for comparable candidate-recall curves.
+        id_hits = []
+        radius_hits = []
+        exact_order_distances = []
+        for i in range(len(queries)):
+            reference_radius = float(exact_sqdist[i, NEIGHBORS-1])
+            tolerance = 1e-5 + 1e-5*max(1., abs(reference_radius))
+            seen = set()
+            unique = []
+            distances_unique = []
+            for value, distance in zip(retrieved[i], found_dist[i]):
+                idx = int(value)
+                if idx >= 0 and idx not in seen:
+                    seen.add(idx)
+                    unique.append(idx)
+                    distances_unique.append(float(distance))
+                    if len(unique) >= NEIGHBORS:
+                        break
+            id_hits.append(
+                len(set(int(x) for x in truth[i, :NEIGHBORS]).intersection(unique))
+                / NEIGHBORS
+            )
+            radius_hits.append(
+                sum(distance <= reference_radius+tolerance
+                    for distance in distances_unique) / NEIGHBORS
+            )
+            exact_order_distances.append(distances_unique)
+        recall = float(np.mean(id_hits))
+        radius_recall = float(np.mean(radius_hits))
         curve.append({
             "nprobe": nprobe,
             "mean_scan_fraction": float(scanned.mean()/original_n),
             "mean_scanned_entries": float(scanned.mean()),
             "max_scanned_entries": int(scanned.max()),
             "recall_at_10": recall,
-            "mean_candidate_recall_at_10": recall,
+            "tie_aware_recall_at_10": radius_recall,
+            "mean_candidate_recall_at_10": radius_recall,
             "median_search_ms_per_query": float(np.median(elapsed)),
         })
     expected_full_fraction = float(index.ntotal/original_n)
     if not np.isclose(curve[-1]["mean_scan_fraction"], expected_full_fraction):
         raise AssertionError("full-list scan did not include all index entries")
-    if curve[-1]["recall_at_10"] < 0.99999:
-        raise AssertionError("full-scan deduplicated FAISS recall must be exact")
+    if curve[-1]["tie_aware_recall_at_10"] < 0.99999:
+        # If this fires, the full IVF scan is genuinely missing a neighbor
+        # whose distance is within the exact 10th-distance boundary.
+        # Do not mask this by waiving the full-scan correctness invariant.
+        raise AssertionError(
+            "full-scan FAISS nearest-neighbor distances disagree with exhaustive search "
+            f"(tie-aware recall={curve[-1]['tie_aware_recall_at_10']:.6f}, "
+            f"raw ID recall={curve[-1]['recall_at_10']:.6f})"
+        )
     return {
         "num_stored_entries": int(index.ntotal),
         "storage_amplification": expected_full_fraction,
