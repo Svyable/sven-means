@@ -62,6 +62,17 @@ class SMeans(
         Squared nearest-centroid separation versus running MSE threshold.
     revive_abandon_epochs : float, default=2.0
         Release untouched centroids after this many full-pass equivalents.
+    revive_acceptance : {"none", "net_holdout"}, default="none"
+        Experimental CPU-only independent reserved-row net-SSE acceptance
+        of centroid replacement. Uses a heuristic lower-confidence bound.
+    net_validation_fraction : float, default=0.10
+        Input fraction excluded from training and reserved for decisions.
+    net_lcb_z : float, default=1.645
+        Heuristic standard-error multiplier (NOT formal coverage).
+    net_min_gain : float, default=0
+        Minimum per-row lower-bound net SSE reduction to accept a split.
+    net_max_proposals : int, default=4
+        Max independently evaluated candidates at each revival check.
     revive_geometry : {"global", "local_direction"}, default="global"
         Experimental CPU-only covariance-vector split proposals; default uses
         upstream global-variance random perturbations.
@@ -129,6 +140,11 @@ class SMeans(
         "revive_protection": [StrOptions({"none", "distance"})],
         "revive_near_factor": [Interval(Real, 0.0, None, closed="neither")],
         "revive_abandon_epochs": [Interval(Real, 0.0, None, closed="neither")],
+        "revive_acceptance": [StrOptions({"none", "net_holdout"})],
+        "net_validation_fraction": [Interval(Real, 0.0, 0.4, closed="right")],
+        "net_lcb_z": [Interval(Real, 0.0, None, closed="left")],
+        "net_min_gain": [Interval(Real, 0.0, None, closed="left")],
+        "net_max_proposals": [Interval(Integral, 1, None, closed="left")],
         "split_mult": [Interval(Real, 0.0, None, closed="left")],
         "revive_geometry": [StrOptions({"global", "local_direction"})],
         "local_beta": [Interval(Real, 0.0, 1.0, closed="left")],
@@ -168,6 +184,11 @@ class SMeans(
         revive_protection: str = "none",
         revive_near_factor: float = 4.0,
         revive_abandon_epochs: float = 2.0,
+        revive_acceptance: str = "none",
+        net_validation_fraction: float = 0.10,
+        net_lcb_z: float = 1.645,
+        net_min_gain: float = 0.0,
+        net_max_proposals: int = 4,
         split_mult: float = 0.55,
         revive_geometry: str = "global",
         local_beta: float = 0.85,
@@ -203,6 +224,11 @@ class SMeans(
         self.revive_protection = revive_protection
         self.revive_near_factor = revive_near_factor
         self.revive_abandon_epochs = revive_abandon_epochs
+        self.revive_acceptance = revive_acceptance
+        self.net_validation_fraction = net_validation_fraction
+        self.net_lcb_z = net_lcb_z
+        self.net_min_gain = net_min_gain
+        self.net_max_proposals = net_max_proposals
         self.split_mult = split_mult
         self.revive_geometry = revive_geometry
         self.local_beta = local_beta
@@ -257,6 +283,11 @@ class SMeans(
             revive_protection=self.revive_protection,
             revive_near_factor=float(self.revive_near_factor),
             revive_abandon_epochs=float(self.revive_abandon_epochs),
+            revive_acceptance=self.revive_acceptance,
+            net_validation_fraction=float(self.net_validation_fraction),
+            net_lcb_z=float(self.net_lcb_z),
+            net_min_gain=float(self.net_min_gain),
+            net_max_proposals=int(self.net_max_proposals),
             split_mult=float(self.split_mult),
             revive_geometry=self.revive_geometry,
             local_beta=float(self.local_beta),

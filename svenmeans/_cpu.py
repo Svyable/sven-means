@@ -9,6 +9,12 @@ import torch
 from ._directional import DirectionalRevival
 from ._finalization import invalidate_split_statistics
 from ._rare_guard import distance_aware_removable
+from ._net_guard import (
+    reserve_validation,
+    exact_top_three,
+    net_split_gain_samples,
+    lower_confidence_gate,
+)
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
@@ -81,9 +87,30 @@ def fit_cpu(
 ) -> Dict[str, Any]:
     """Fit s-means on CPU tensor `x` (shape `[n, d]`, float32)."""
     x_f = x.detach().to(dtype=torch.float32).contiguous()
+    original_x = x_f
     n, d = int(x_f.shape[0]), int(x_f.shape[1])
-    x_norm = (x_f * x_f).sum(dim=1).contiguous()
     device = x_f.device
+    net_enabled = cfg.revive_acceptance == "net_holdout"
+    if cfg.revive_acceptance not in ("none", "net_holdout"):
+        raise ValueError("revive_acceptance must be 'none' or 'net_holdout'")
+    if (not math.isfinite(cfg.net_validation_fraction)
+            or not 0.0 < cfg.net_validation_fraction <= 0.4):
+        raise ValueError("net_validation_fraction must be in (0, 0.4]")
+    if (not math.isfinite(cfg.net_lcb_z) or cfg.net_lcb_z < 0
+            or not math.isfinite(cfg.net_min_gain) or cfg.net_min_gain < 0
+            or cfg.net_max_proposals < 1):
+        raise ValueError("net LCB z/gain must be finite nonnegative and max proposals >= 1")
+    # Crucially, training never sees the reserved rows: not during seeding,
+    # EMA updates, candidate selection, or final-pass centroid fitting.
+    validation = None
+    if net_enabled:
+        x_f, validation = reserve_validation(
+            x_f, seed, cfg.net_validation_fraction
+        )
+        if len(x_f) < k:
+            raise ValueError("net validation leaves fewer than k fit points")
+    n = len(x_f)
+    x_norm = (x_f * x_f).sum(dim=1).contiguous()
 
     recipe = make_recipe(n, k, d, nepochs, revive_thresh=cfg.revive_thresh)
     batch_size = max(1, min(n, recipe.batch_size))
@@ -129,6 +156,11 @@ def fit_cpu(
         1, int(math.ceil(cfg.revive_abandon_epochs * math.ceil(n / batch_size)))
     )
     guarded_candidate_checks = 0
+    net_proposed = 0
+    net_accepted = 0
+    net_rejected = 0
+    net_gain_sum = 0.0
+    net_lcb_sum = 0.0
 
     pass_sums = torch.zeros((k, d), dtype=torch.float64, device=device)
     pass_counts = torch.zeros((k,), dtype=torch.float64, device=device)
@@ -309,6 +341,61 @@ def fit_cpu(
 
                     if n_sp > 0:
                         tgt = torch.nonzero(targets_available, as_tuple=True)[0][:n_sp]
+                        if net_enabled:
+                            assert validation is not None
+                            # Proposals come from fit-only data. The *full
+                            # nearest-centroid loss*, including the cost of
+                            # deleting the target, is measured on reserved rows.
+                            # Recompute top-3 after each accepted mutation.
+                            accepted_src = []
+                            accepted_tgt = []
+                            accepted_delta = []
+                            trials = min(n_sp, cfg.net_max_proposals)
+                            top_dist, top_ids = exact_top_three(validation, centroids)
+                            for i in range(trials):
+                                ds = int(src[i].item())
+                                dt = int(tgt[i].item())
+                                per_row = net_split_gain_samples(
+                                    validation, top_dist, top_ids, ds, dt,
+                                    centroids[ds], delta[i],
+                                )
+                                ok, estimate, lcb = lower_confidence_gate(
+                                    per_row, z=cfg.net_lcb_z,
+                                    gain_floor=cfg.net_min_gain,
+                                )
+                                net_proposed += 1
+                                if ok:
+                                    accepted_src.append(ds)
+                                    accepted_tgt.append(dt)
+                                    accepted_delta.append(delta[i].clone())
+                                    net_accepted += 1
+                                    net_gain_sum += estimate
+                                    net_lcb_sum += lcb
+                                    # Temporary local copy updates ensure next
+                                    # proposal is tested against prior accepts.
+                                    original = centroids[ds].clone()
+                                    centroids[ds] = original - delta[i]
+                                    centroids[dt] = original + delta[i]
+                                    top_dist, top_ids = exact_top_three(
+                                        validation, centroids
+                                    )
+                                else:
+                                    net_rejected += 1
+                            if accepted_src:
+                                src = torch.tensor(accepted_src, dtype=torch.int64, device=device)
+                                tgt = torch.tensor(accepted_tgt, dtype=torch.int64, device=device)
+                                delta = torch.stack(accepted_delta)
+                                # Restore old positions so the existing split
+                                # state/usage bookkeeping below runs unchanged.
+                                # Positions for accepted sources have already
+                                # been changed above; reconstruct old center:
+                                # c_old = c_new_source + delta.
+                                centroids[src] += delta
+                                n_sp = len(accepted_src)
+                            else:
+                                n_sp = 0
+
+                    if n_sp > 0:
                         dc = centroids[src].clone()
                         half = 0.5 * usage[src]
                         centroids[tgt] = dc + delta
@@ -348,8 +435,9 @@ def fit_cpu(
     # The original CPU implementation executed this pass even if labels were disabled.
     labels, inertia = None, None
     if compute_labels:
+        all_norm = (original_x * original_x).sum(dim=1).contiguous() if net_enabled else x_norm
         labels, sq_dists = tiled_assign(
-            x_f, centroids, x_norm=x_norm,
+            original_x, centroids, x_norm=all_norm,
             tile_rows=cfg.assign_tile_rows, tile_cols=cfg.assign_tile_cols,
         )
         inertia = float(sq_dists.sum().item())
@@ -364,6 +452,12 @@ def fit_cpu(
         "dead_clusters": int((pass_counts <= 0.5).sum().item()),
         "total_splits": int(total_splits),
         "guarded_candidate_checks": int(guarded_candidate_checks),
+        "net_proposed": int(net_proposed),
+        "net_accepted": int(net_accepted),
+        "net_rejected": int(net_rejected),
+        "net_validation_rows": int(len(validation)) if validation is not None else 0,
+        "net_mean_accepted_gain": net_gain_sum / max(1, net_accepted),
+        "net_mean_accepted_lcb": net_lcb_sum / max(1, net_accepted),
         "backend": "cpu_tiled",
         "dtype": "float32",
     }

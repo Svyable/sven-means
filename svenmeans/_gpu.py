@@ -113,6 +113,11 @@ def fit_gpu(
     """Fit s-means end-to-end on CUDA tensor `x`."""
     if not x.is_cuda:
         raise ValueError("fit_gpu expects a CUDA tensor")
+    if cfg.revive_acceptance != "none":
+        raise NotImplementedError(
+            "revive_acceptance='net_holdout' is research CPU-only; "
+            "GPU and distributed holdout evaluation are unvalidated."
+        )
     if cfg.revive_protection != "none":
         raise NotImplementedError(
             "revive_protection='distance' is experimental and CPU-only. "
