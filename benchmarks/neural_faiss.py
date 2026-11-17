@@ -37,6 +37,7 @@ MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 # First pilot resolved these immutable revisions. Freeze them for replication.
 MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 BANKING = "PolyAI/banking77"
+GSM8K = "openai/gsm8k"
 BANKING_REVISION = "1846984189f2bc0ac51c6fc3a600fa9e1714e0c6"
 PROBES = (1, 2, 4, 8, 16, 32, 64, 96)
 BUDGETS = (0.05, 0.10, 0.15, 0.25)
@@ -79,6 +80,26 @@ def load_texts(dataset: str, n_train: int, n_queries: int, seed: int):
         metadata = {
             "dataset": BANKING, "dataset_sha": revision,
             "dataset_license": "cc-by-4.0", "partition": "official train/test",
+        }
+    elif dataset == "gsm8k":
+        # New independent (post-pilot) third-domain evaluation, not an
+        # opportunity to select hyperparameters on the prior two corpora.
+        from datasets import load_dataset
+        from huggingface_hub import HfApi
+
+        revision = HfApi().dataset_info(GSM8K).sha
+        train_source = load_dataset(
+            GSM8K, name="main", split="train", revision=revision
+        )
+        query_source = load_dataset(
+            GSM8K, name="main", split="test", revision=revision
+        )
+        train = _unique_documents(train_source["question"], n_train, rng)
+        queries = _unique_documents(query_source["question"], n_queries, rng, excluded=train)
+        metadata = {
+            "dataset": GSM8K, "dataset_sha": revision,
+            "dataset_license": "mit", "partition": "official train/test",
+            "embedded_field": "question only, no answer/solution information",
         }
     elif dataset == "20news":
         from sklearn.datasets import fetch_20newsgroups
@@ -307,7 +328,7 @@ def summarize_paired(rows):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dataset", choices=("banking77", "20news"), required=True)
+    ap.add_argument("--dataset", choices=("banking77", "20news", "gsm8k"), required=True)
     ap.add_argument("--n-train", type=int, default=1600)
     ap.add_argument("--n-test", type=int, default=160)
     ap.add_argument("--clusters", type=int, default=64)

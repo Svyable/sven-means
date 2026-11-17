@@ -154,3 +154,24 @@ as fresh independent test data.
 - Distinguish observations borrowed from Eyal Weiss (2026)
   distance-aware revival work, cited in Experiment 006, from any
   future independently validated contribution.
+
+
+## Third-domain challenge — GSM8K (registered 2026-11-16 local time)
+
+After the first BANKING77/20 Newsgroups pilot was observed, we chose
+[openai/gsm8k](https://huggingface.co/datasets/openai/gsm8k) as an
+**additional independent, MIT-licensed mathematics-word-problem corpus**.
+The model still embeds only the `question` field; answers and
+solutions are excluded. The official train/test split is respected,
+duplicates excluded, and the exact dataset SHA is recorded.
+
+The algorithm, hyperparameters, pretrained model revision, vector
+dimension, cluster count, training epochs, seeds and FAISS evaluation
+methods are **unchanged** from the first two-corpus pilot. This is an
+explicitly disclosed *follow-up*, not a retroactively preregistered
+component of Experiment 005. Its value is to test out-of-domain
+generalization **without tuning to this third corpus**.
+
+A favorable result on GSM8K alone still cannot establish a new
+algorithmic contribution or beat Meta e-means at scale. The full
+negative/positive paired data will be added only after CI verification.
