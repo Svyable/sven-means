@@ -101,7 +101,7 @@ def fit_centers(train, k, epochs, seed, model):
 def make_truth(train, query):
     index = faiss.IndexFlatL2(train.shape[1])
     index.add(train)
-    return index.search(query, 10)[1]
+    return index.search(query, 10)
 
 
 def compare_matched(rows):
@@ -151,7 +151,7 @@ def study(name, args):
         test = np.ascontiguousarray(
             test_t[:min(args.queries, len(test_t))].numpy(), dtype=np.float32
         )
-        truth = make_truth(train, test)
+        exact_sqdist, truth = make_truth(train, test)
         records = []
         for seed in range(args.model_seeds):
             for model in MODELS:
@@ -179,7 +179,8 @@ def study(name, args):
                             secondary_ids=options[sec_method][selection],
                         )
                     stats = evaluate_spill_index(
-                        index, centers, test, truth, original_n=len(train),
+                        index, centers, test, truth, exact_sqdist,
+                        original_n=len(train),
                         repeats=args.repeats,
                     )
                     rows.append({
