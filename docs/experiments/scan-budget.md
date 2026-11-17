@@ -25,7 +25,7 @@ candidates ignoring search overhead.
 Compute mean candidate recall and mean scan fraction across 96 independent
 held-out queries, for `nprobe in {1,2,4,8,16,32,64}`.
 
-For an equal **expected** scan budget `b in {0.25, 0.50, 0.75}`, linearly
+For an equal **expected** scan budget `b in {0.05, 0.10, 0.15, 0.25, 0.50, 0.75}`, linearly
 interpolate between neighboring measured operating points. This has a
 clear operational meaning: randomly choose the upper or lower probe count
 with a probability yielding the desired *average* scanned fraction.
@@ -52,6 +52,16 @@ A positive fixed-nprobe recall gain is not a success if it requires
 substantially more candidate scans. The primary outcome is
 **candidate recall at equal expected scanned fractions**, separately
 from test MSE and CPU fit latency.
+
+## Disclosure: additional early operating points
+
+An initial CI run showed that multiple families had near-perfect recall by
+25% scanned, making the originally chosen 25/50/75% budget grid nearly
+uninformative. We therefore added 5/10/15% budgets to inspect the unsaturated
+portion **after observing the initial cost curves**. This is disclosed rather
+than framed as preregistered, and the full 1/2/4/8/16/32/64-probe curves are
+retained so reviewers can choose their own operating point. We will not
+select one favorable budget as universal proof.
 
 ## Decision criteria
 
