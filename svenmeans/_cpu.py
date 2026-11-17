@@ -279,7 +279,9 @@ def fit_cpu(
                         if is_last_pass and cfg.reset_pass_on_split:
                             # A post-split center must not inherit the donor's
                             # old single-center assignment mean.
-                            invalidate_split_statistics(pass_sums, pass_counts, src, tgt)
+                            invalidate_split_statistics(
+                                pass_sums, pass_counts, src, tgt, cfg.donor_pass_retention
+                            )
                         dirty_c = True
                         total_splits += n_sp
 
