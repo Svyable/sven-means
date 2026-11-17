@@ -113,3 +113,40 @@ pip install faiss-cpu==1.16.0
 python -m pytest -q tests/test_orthogonal_spill.py
 python -m benchmarks.orthogonal_spill_study --dataset news_lsa --output /tmp/soar.json
 ```
+
+
+## Measured pilot: Nov 17, 2026 UTC — negative/conditional evidence
+
+[Actions run 44106459030](https://github.com/Svyable/sven-means/actions/runs/44106459030) **passed the 12-case real FAISS IVF invariant suite**, both the LSA development-corpus benchmark, and both rotated/Zipf synthetic controls. The experiment uses two independent source draws × three training seeds per model (**six paired observations per row**), with exact source-array SHA-256, all nprobe/scan/latency observations, and full per-fit raw JSON available as CI artifacts.
+
+At **equal expected scanning of 10% of the original database size in index entries**, this table reports the mean actual FAISS tie-aware recall@10 percentage-point gain from **25% spill** compared with ordinary second-nearest spill on exactly the same selected vectors, followed by gain vs a **non-spilled index** with the same centroids:
+
+| Development dataset | Centroid producer | Orthogonal vs nearest-secondary, +25% entries | Orthogonal vs no spill, +25% entries |
+|---|---|---:|---:|
+| Real 20 Newsgroups LSA | Sven global | **+1.754 pp** | **−0.805 pp** |
+| Real 20 Newsgroups LSA | Sven local | **+2.057 pp** | **−0.929 pp** |
+| Real 20 Newsgroups LSA | FAISS Lloyd, 2 iters | **+2.544 pp** | **+0.407 pp** |
+| Real 20 Newsgroups LSA | Meta NumpyEmeans, 2 epochs | **+1.564 pp** | **−1.021 pp** |
+| Rotated synthetic | Sven global | +0.032 pp | −0.007 pp |
+| Rotated synthetic | Sven local | +0.000 pp | −0.014 pp |
+| Rotated synthetic | FAISS Lloyd, 2 iters | +0.009 pp | +0.138 pp |
+| Rotated synthetic | Meta NumpyEmeans, 2 epochs | **−0.013 pp** | −0.039 pp |
+| Skewed Zipf synthetic | Sven global | +1.324 pp | **−1.709 pp** |
+| Skewed Zipf synthetic | Sven local | −0.001 pp | −0.829 pp |
+| Skewed Zipf synthetic | FAISS Lloyd, 2 iters | +0.929 pp | −2.092 pp |
+| Skewed Zipf synthetic | Meta NumpyEmeans, 2 epochs | +0.370 pp | −1.261 pp |
+
+All quoted comparison pairs have **identical serialized FAISS index size** within each 25% replication quota. Compared with no spilling, 25% replication increased serialized index size about **1.246×**. Actual search/latency and index build times are in the raw run artifacts; equal scanned entries is *not* equivalent to equal wall-clock search time or memory.
+
+For a **50%** replication quota on real LSA document vectors, orthogonality-aware spilling gains against the *same-storage nearest-secondary* control were **+2.115 pp (Sven global), +2.126 pp (Sven local), +4.372 pp (FAISS2), +1.463 pp (Meta2)**. Versus the *unreplicated* index, however, the same 50% orthogonal spill delivered respectively **−0.783, −1.202, +1.204, and −0.792 pp** at 10% expected scanned entries. Thus even the larger replicated index usually did not beat non-replicated routing for the Sven or Meta centroids.
+
+### Correctness nuance: distance ties
+
+The initial experiment failed on a strict `full nprobe=k` **ID-based** recall assertion. Some development vectors yield exactly or nearly equal squared distances to queries; the exhaustive FlatL2 and full-list IVF implementations can legally break such ties differently and return distinct valid IDs. To retain a strict geometric correctness check, the benchmark was changed to report **both** raw exact-ID recall and **tie-aware** recall using the exhaustively computed tenth-nearest squared-distance radius plus a documented FP32 tolerance. Full-list **tie-aware recall must be 100%**, or the benchmark fails. The changed source and full CI rerun both pass.
+
+### Falsification / decision
+
+- **Conditional positive:** the SOAR-inspired secondary assignment is more effective than naive nearest-secondary at identical replication and scan work on the real LSA development vectors across all four centroid producers.
+- **Important negative:** on real LSA, *three of four* 25%-replicated orthogonal arms have **lower** recall than non-replicated IVF at equal scanned entries; on the skewed synthetic dataset all four regress vs no spill. Some gains against naive spill merely recover harm from naive replication.
+- **No general upgrade and no publication novelty:** Google **already** invented orthogonal spilling. The L2 adaptation here does not improve Sven centroid MSE or solve the CPU/GPU training-speed gap to Meta e-means. Leave it as an opt-in research benchmark, **not** a default index layer.
+- The genuine next question is how to **selectively purchase coverage of otherwise missed neighbors under an entry/latency budget** using train-only neighbor relationships or a held-out calibration split. Existing boundary-margin selection is weak. Any supervised/retrieval-aware adjustment must be tested on new, never-tuned embeddings and benchmarked against *original ScaNN SOAR*, not only our nearest-secondary control.
