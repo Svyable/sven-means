@@ -38,6 +38,7 @@ MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 BANKING = "PolyAI/banking77"
 GSM8K = "openai/gsm8k"
+GSM8K_REVISION = "740312add88f781978c0658806c59bc2815b9866"
 BANKING_REVISION = "1846984189f2bc0ac51c6fc3a600fa9e1714e0c6"
 PROBES = (1, 2, 4, 8, 16, 32, 64, 96)
 BUDGETS = (0.05, 0.10, 0.15, 0.25)
@@ -85,9 +86,8 @@ def load_texts(dataset: str, n_train: int, n_queries: int, seed: int):
         # New independent (post-pilot) third-domain evaluation, not an
         # opportunity to select hyperparameters on the prior two corpora.
         from datasets import load_dataset
-        from huggingface_hub import HfApi
 
-        revision = HfApi().dataset_info(GSM8K).sha
+        revision = GSM8K_REVISION
         train_source = load_dataset(
             GSM8K, name="main", split="train", revision=revision
         )
