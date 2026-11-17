@@ -22,7 +22,15 @@ Do not re-seed or retrain either Sven model. Apply independently
 keeping any empty centroid unchanged. No held-out query enters the
 update. This produces 6 arms (global/local × 0/1/2).
 
-Compare with FAISS's two-iteration and 20-iteration k-means references.
+Compare with FAISS's two-iteration and 20-iteration Lloyd k-means
+and **Meta FAIR's actual `NumpyEmeans` CPU reference** at two and five
+training epochs. Its source is pinned to [facebookresearch/faiss commit
+`c8f283867285af547db7a701c1b8dfa89631b3ea`](https://github.com/facebookresearch/faiss/tree/c8f283867285af547db7a701c1b8dfa89631b3ea/contrib/e_means).
+The CPU study checks out this exact external source into
+`faiss-meta/contrib/e_means`, appends it to `faiss.contrib` import
+paths, and verifies the real `NumpyEmeans` API. No reimplementation
+or cherry-picked claims from the Meta paper.
+
 Use same pretrained Apache-2.0 MiniLM 384D representation, official
 train/test corpus splits, two data selections × two centroid seeds
 on *development* corpora BANKING77 and 20 Newsgroups.
@@ -44,8 +52,11 @@ generalization after choosing refinement count.
 - If even two Lloyd updates fail to close the FAISS2 gap, centroid
   initialization and weighting/centroid allocation deserve scrutiny.
 - If one update closes the accuracy/recall gap but makes total CPU
-  training much slower than FAISS2, that is a useful **diagnostic**,
-  not a competitive speed breakthrough.
+  training much slower than FAISS2 or Meta's 2-epoch NumpyEmeans,
+  that is a useful **diagnostic**, not a competitive speed breakthrough.
+- The 5-epoch Meta and 20-iteration FAISS arms are *higher-compute*
+  references, not equal-epoch/clock head-to-head competitors. Record
+  each arm's actual CPU wall time independently.
 - Only a genuine Pareto gain at equal wall-clock time on *new* corpora
   and GPU hardware would justify general performance or paper claims.
 
