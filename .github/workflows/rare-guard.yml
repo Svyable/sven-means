@@ -1,0 +1,55 @@
+name: Attributed rare-cluster protection ablation
+on:
+  pull_request:
+    paths:
+      - 'svenmeans/**'
+      - 'tests/test_rare_guard.py'
+      - 'benchmarks/rare_guard_study.py'
+      - '.github/workflows/rare-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rare-stress-and-real-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU package
+        run: python -m pip install -e ".[dev]"
+      - name: Test rare-center protection invariants
+        run: python -m pytest -q tests/test_rare_guard.py
+      - name: Four-arm paired offline test
+        run: |
+          python -m benchmarks.rare_guard_study --dataset all-offline --output /tmp/rare-guard-offline.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protected-revival-offline
+          path: /tmp/rare-guard-offline.json
+          retention-days: 30
+
+  document-vectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU package
+        run: python -m pip install -e ".[dev]"
+      - name: Paired LSA document vectors
+        run: |
+          python -m benchmarks.rare_guard_study --dataset news_lsa --output /tmp/rare-guard-documents.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protected-revival-documents
+          path: /tmp/rare-guard-documents.json
+          retention-days: 30

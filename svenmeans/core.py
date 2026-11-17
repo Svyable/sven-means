@@ -28,6 +28,7 @@ class SMeansResult:
     total_splits: int
     backend: str
     dtype: str
+    guarded_candidate_checks: int = 0
 
 
 def _resolve_device(x: torch.Tensor, device: str) -> torch.device:
@@ -165,6 +166,7 @@ def smeans(
         total_splits=raw["total_splits"],
         backend=raw["backend"],
         dtype=raw["dtype"],
+        guarded_candidate_checks=raw.get("guarded_candidate_checks", 0),
     )
 
 
