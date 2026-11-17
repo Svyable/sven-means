@@ -113,6 +113,11 @@ def fit_gpu(
     """Fit s-means end-to-end on CUDA tensor `x`."""
     if not x.is_cuda:
         raise ValueError("fit_gpu expects a CUDA tensor")
+    if cfg.revive_protection != "none":
+        raise NotImplementedError(
+            "revive_protection='distance' is experimental and CPU-only. "
+            "GPU validation and scalable nearest-center search are outstanding."
+        )
     if cfg.revive_geometry != "global":
         raise NotImplementedError(
             "revive_geometry='local_direction' is experimental and currently CPU-only; "

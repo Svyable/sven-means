@@ -55,6 +55,13 @@ class SMeans(
         Fraction of the total step budget after which dead-cluster revival stops.
     split_mult : float, default=0.55
         Perturbation radius multiplier scaled by local per-cluster RMS distortion.
+    revive_protection : {"none", "distance"}, default="none"
+        Experimental guard for rare isolated low-use centroids. The distance
+        test is from Weiss (2026), arXiv:2611.18238; CPU-only.
+    revive_near_factor : float, default=4.0
+        Squared nearest-centroid separation versus running MSE threshold.
+    revive_abandon_epochs : float, default=2.0
+        Release untouched centroids after this many full-pass equivalents.
     revive_geometry : {"global", "local_direction"}, default="global"
         Experimental CPU-only covariance-vector split proposals; default uses
         upstream global-variance random perturbations.
@@ -116,6 +123,9 @@ class SMeans(
         "dtype": [StrOptions({"auto", "float32", "bfloat16", "float16"})],
         "revive_thresh": [Interval(Real, 0.0, 1.0, closed="both")],
         "revive_stop_frac": [Interval(Real, 0.0, 1.0, closed="both")],
+        "revive_protection": [StrOptions({"none", "distance"})],
+        "revive_near_factor": [Interval(Real, 0.0, None, closed="neither")],
+        "revive_abandon_epochs": [Interval(Real, 0.0, None, closed="neither")],
         "split_mult": [Interval(Real, 0.0, None, closed="left")],
         "revive_geometry": [StrOptions({"global", "local_direction"})],
         "local_beta": [Interval(Real, 0.0, 1.0, closed="left")],
@@ -151,6 +161,9 @@ class SMeans(
         dtype: str = "auto",
         revive_thresh: float = 0.1,
         revive_stop_frac: float = 0.85,
+        revive_protection: str = "none",
+        revive_near_factor: float = 4.0,
+        revive_abandon_epochs: float = 2.0,
         split_mult: float = 0.55,
         revive_geometry: str = "global",
         local_beta: float = 0.85,
@@ -182,6 +195,9 @@ class SMeans(
         self.dtype = dtype
         self.revive_thresh = revive_thresh
         self.revive_stop_frac = revive_stop_frac
+        self.revive_protection = revive_protection
+        self.revive_near_factor = revive_near_factor
+        self.revive_abandon_epochs = revive_abandon_epochs
         self.split_mult = split_mult
         self.revive_geometry = revive_geometry
         self.local_beta = local_beta
@@ -232,6 +248,9 @@ class SMeans(
         return SMeansConfig(
             revive_thresh=float(self.revive_thresh),
             revive_stop_frac=float(self.revive_stop_frac),
+            revive_protection=self.revive_protection,
+            revive_near_factor=float(self.revive_near_factor),
+            revive_abandon_epochs=float(self.revive_abandon_epochs),
             split_mult=float(self.split_mult),
             revive_geometry=self.revive_geometry,
             local_beta=float(self.local_beta),
