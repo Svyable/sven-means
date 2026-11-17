@@ -110,6 +110,7 @@ class DirectionalRevival:
         usage: torch.Tensor,
         split_mult: float,
         gain_floor: float = 0.0,
+        radius_policy: str = "rms_scaled",
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return eligible donor IDs and unit-direction-scaled perturbations.
 
@@ -119,9 +120,15 @@ class DirectionalRevival:
         """
         if n_requested < 0 or split_mult < 0 or gain_floor < 0:
             raise ValueError("n_requested, split_mult, gain_floor must be nonnegative")
+        if radius_policy not in ("rms_scaled", "mean_abs"):
+            raise ValueError("radius_policy must be 'rms_scaled' or 'mean_abs'")
         good = (donors & (self.observed >= self.min_observations)
                 & (self.mean_sq > 1e-12))
-        radius = split_mult * self.mean_sq.clamp_min(0.0).sqrt()
+        # For fixed assignments and q, E[2*rho*|z| - rho²] is maximized
+        # at rho = E|z|. This is exact for the stored projected moments,
+        # though not guaranteed optimal after reassignment or drift.
+        radius = (self.mean_abs.clamp_min(0.0) if radius_policy == "mean_abs"
+                  else split_mult * self.mean_sq.clamp_min(0.0).sqrt())
         gain_per_point = (2.0 * radius * self.mean_abs - radius.square()).clamp_min(0.0)
         scores = usage.clamp_min(0) * gain_per_point
         good &= torch.isfinite(scores) & (gain_per_point > gain_floor)
