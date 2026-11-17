@@ -175,3 +175,26 @@ generalization **without tuning to this third corpus**.
 A favorable result on GSM8K alone still cannot establish a new
 algorithmic contribution or beat Meta e-means at scale. The full
 negative/positive paired data will be added only after CI verification.
+
+
+## Third-domain pilot result — GSM8K, November 17 2026 UTC
+
+The independently chosen [MIT-licensed GSM8K math-question corpus](https://huggingface.co/datasets/openai/gsm8k), official train/test split, was tested on exactly the same MiniLM 384D embedding model and k=64/2 Sven epoch/1600 train/160 query configuration, **without retuning after the BANKING77/Newsgroups pilot**. Only question text, never answers or solutions, was embedded.
+
+First run: [GitHub Actions 44021652103](https://github.com/Svyable/sven-means/actions/runs/44021652103); archived per-seed FAISS IVF-Flat search data and exact corpus/model/vector hashes. Dataset SHA `740312add88f781978c0658806c59bc2815b9866` (now frozen in source); model SHA `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`. Two independent document selections × three centroid seeds (six paired fits), not six different corpora.
+
+**Relative to the same-seed Sven global default**, with actual FAISS IVFFlat recall@10 at **equal expected 10% candidate vectors scanned**:
+
+| Arm | Mean held-out MSE gain | Mean FAISS recall@10 gain | Median CPU clustering-fit time ratio |
+|---|---:|---:|---:|
+| Sven local residual direction | **+3.996%**, 6/6 wins | **+13.302 percentage points**, 6/6 wins | **1.268×** |
+| Native FAISS k-means, 2 Lloyd iterations | +4.536%, 6/6 wins | +17.073 points, 6/6 wins | **0.174×** |
+| Native FAISS k-means, 20 Lloyd iterations | +5.733%, 6/6 wins | +20.300 points, 6/6 wins | 1.085× |
+
+The 5% expected scan point is *unavailable* for the baseline in one of the two selections; the primary comparable point is 10%. Full per-query scan/recall/latency curves and all artifacts are retained.
+
+**Interpretation:** the local-versus-global direction improvement from 20 Newsgroups **replicates on a different mathematical-problem text domain** without tuning. This is meaningful but preliminary evidence for a conditional local-residual advantage (six pairs on each of two favorable corpora), while the third corpus BANKING77 remains a counterexample. Crucially, **a standard 2-iteration FAISS Lloyd baseline still wins on GSM8K in both distortion and recall, at about one-sixth the training time of Sven global**. It would be inaccurate to claim best-in-class performance, a new mathematical concept, or a general paper-level breakthrough from these results.
+
+### Next scientifically meaningful question
+
+Separate **centroid quality** from **coarse inverted-list imbalance**. Benchmark equal compute for s-means/local and FAISS Lloyd, isolate initialization and final-pass updates, and test an explicitly train-only neighbor-preservation objective rather than univariate occupancy balancing. These three observed datasets must now be considered development material; a later successful hyperparameter search must be evaluated on new corpora and with GPU/Meta e-means baselines.
