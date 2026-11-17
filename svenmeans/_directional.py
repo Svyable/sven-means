@@ -88,12 +88,18 @@ class DirectionalRevival:
 
         # Normalizing Cq before blending makes the update independent of
         # physical units; Cq retains off-diagonal covariance information.
-        candidate = torch.nn.functional.normalize(
-            self._cov_q[touched] / denom[:, None], dim=1, eps=1e-12
+        previous = self.q[touched]
+        cov_vec = self._cov_q[touched] / denom[:, None]
+        cov_norm = cov_vec.norm(dim=1, keepdim=True)
+        # Empty/zero-residual batches must not erase the unit direction,
+        # especially when beta=0 (otherwise zero becomes an absorbing state).
+        candidate = torch.where(
+            cov_norm > 1e-12, cov_vec / cov_norm.clamp_min(1e-12), previous
         )
-        mixed = self.beta * self.q[touched] + (1.0 - self.beta) * candidate
-        self.q[touched] = torch.nn.functional.normalize(
-            mixed, dim=1, eps=1e-12
+        mixed = self.beta * previous + (1.0 - self.beta) * candidate
+        mixed_norm = mixed.norm(dim=1, keepdim=True)
+        self.q[touched] = torch.where(
+            mixed_norm > 1e-12, mixed / mixed_norm.clamp_min(1e-12), previous
         )
 
     @torch.no_grad()
