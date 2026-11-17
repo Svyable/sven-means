@@ -1,0 +1,57 @@
+name: Paired self-improvement evidence (CPU)
+on:
+  pull_request:
+    paths:
+      - "svenmeans/**"
+      - "benchmarks/release_candidate.py"
+      - ".github/workflows/self-improvement.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-study:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Paired offline study (2 dataset seeds, 4 model seeds)
+        run: python benchmarks/release_candidate.py --dataset all-offline --n 4000 --d 96 --k 64 --model-seeds 4 --data-seeds 2 --output /tmp/sven-self-offline.json
+      - name: Archive complete seed-level evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sven-self-improvement-offline
+          path: /tmp/sven-self-offline.json
+          retention-days: 30
+
+  news-embeddings:
+    runs-on: ubuntu-latest
+    # Downloads a public corpus and caches none of its raw content in Git.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Paired real document embeddings
+        run: python benchmarks/release_candidate.py --dataset news_lsa --n 4000 --test-n 1200 --d 96 --k 64 --model-seeds 4 --data-seeds 2 --output /tmp/sven-self-news.json
+      - name: Archive complete embedding study
+        uses: actions/upload-artifact@v4
+        with:
+          name: sven-self-improvement-text
+          path: /tmp/sven-self-news.json
+          retention-days: 30

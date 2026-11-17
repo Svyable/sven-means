@@ -6,6 +6,7 @@ from typing import Any, Dict, Tuple
 
 import torch
 
+from ._finalization import invalidate_split_statistics
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
@@ -332,6 +333,8 @@ def fit_gpu(
                         hsse = 0.5 * sse_ema[src]
                         sse_ema[tgt] = hsse
                         sse_ema[src] = hsse
+                    if is_final_ep and cfg.reset_pass_on_split:
+                        invalidate_split_statistics(pass_sums, pass_counts, src, tgt)
                     total_splits += n_sp
 
             step += 1

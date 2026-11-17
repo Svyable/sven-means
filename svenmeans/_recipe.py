@@ -24,6 +24,7 @@ class SMeansConfig:
     donor_usage_w: float = 0.35
     eb_tau: float = 0.20
     pass_w_span: float = 0.35
+    reset_pass_on_split: bool = False  # opt-in: discard obsolete final-pass evidence
     sse_decay: float = 0.85
     var_beta: float = 0.85
     init_rounds: int = 4
