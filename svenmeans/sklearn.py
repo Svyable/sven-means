@@ -77,9 +77,10 @@ class SMeans(
     pass_w_span : float, default=0.35
         Progressive weighting slope across batches in the final pass.
     reset_pass_on_split : bool, default=False
-        Experimental: invalidate the source/target final-pass means when
-        reviving a centroid during the final epoch. May reduce pre/post-
-        split assignment contamination, but can also discard useful evidence.
+        Experimental: invalidate changed centroids' final-pass statistics.
+    donor_pass_retention : float, default=0.0
+        When reset_pass_on_split=True, retain this fraction of donor history.
+        0 resets both; 1 clears the revived target only. Neither is a default.
     sse_decay : float, default=0.85
         Exponential moving average decay for per-cluster quantization SSE.
     var_beta : float, default=0.85
@@ -126,6 +127,7 @@ class SMeans(
         "eb_tau": [Interval(Real, 0.0, None, closed="left")],
         "pass_w_span": [Interval(Real, 0.0, 1.0, closed="both")],
         "reset_pass_on_split": ["boolean"],
+        "donor_pass_retention": [Interval(Real, 0.0, 1.0, closed="both")],
         "sse_decay": [Interval(Real, 0.0, 1.0, closed="neither")],
         "var_beta": [Interval(Real, 0.0, 1.0, closed="neither")],
         "init_rounds": [Interval(Integral, 2, None, closed="left")],
@@ -160,6 +162,7 @@ class SMeans(
         eb_tau: float = 0.20,
         pass_w_span: float = 0.35,
         reset_pass_on_split: bool = False,
+        donor_pass_retention: float = 0.0,
         sse_decay: float = 0.85,
         var_beta: float = 0.85,
         init_rounds: int = 4,
@@ -190,6 +193,7 @@ class SMeans(
         self.eb_tau = eb_tau
         self.pass_w_span = pass_w_span
         self.reset_pass_on_split = reset_pass_on_split
+        self.donor_pass_retention = donor_pass_retention
         self.sse_decay = sse_decay
         self.var_beta = var_beta
         self.init_rounds = init_rounds
@@ -239,6 +243,7 @@ class SMeans(
             eb_tau=float(self.eb_tau),
             pass_w_span=float(self.pass_w_span),
             reset_pass_on_split=bool(self.reset_pass_on_split),
+            donor_pass_retention=float(self.donor_pass_retention),
             sse_decay=float(self.sse_decay),
             var_beta=float(self.var_beta),
             init_rounds=int(self.init_rounds),

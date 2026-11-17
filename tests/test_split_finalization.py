@@ -24,6 +24,41 @@ def test_only_changed_clusters_lose_final_pass_evidence():
             assert counts[i] == before_counts[i]
 
 
+def test_fractional_donor_retention_zeros_target_only():
+    sums = torch.arange(20, dtype=torch.float64).reshape(5, 4).clone()
+    counts = torch.arange(5, dtype=torch.float64) + 2
+    initial_sums, initial_counts = sums.clone(), counts.clone()
+    invalidate_split_statistics(sums, counts, torch.tensor([2]),
+                                torch.tensor([4]), donor_retention=0.5)
+    assert torch.equal(sums[2], initial_sums[2] * 0.5)
+    assert counts[2] == initial_counts[2] * 0.5
+    assert sums[4].count_nonzero() == 0 and counts[4] == 0
+    for idx in (0, 1, 3):
+        assert torch.equal(sums[idx], initial_sums[idx])
+        assert counts[idx] == initial_counts[idx]
+
+
+def test_target_only_preserves_donor_statistics():
+    sums = torch.randn(5, 4, generator=torch.Generator().manual_seed(7))
+    counts = torch.arange(5, dtype=torch.float32) + 5
+    old_sums, old_counts = sums.clone(), counts.clone()
+    invalidate_split_statistics(sums, counts, torch.tensor([1]),
+                                torch.tensor([3]), donor_retention=1.0)
+    assert torch.equal(sums[1], old_sums[1])
+    assert counts[1] == old_counts[1]
+    assert sums[3].count_nonzero() == 0 and counts[3] == 0
+
+
+def test_invalid_retention_rejected_even_when_reset_disabled():
+    with pytest.raises(ValueError, match="donor_pass_retention"):
+        smeans(torch.randn(100, 4), 5, device="cpu",
+               config=SMeansConfig(donor_pass_retention=-0.1))
+    with pytest.raises(ValueError, match="donor_retention"):
+        invalidate_split_statistics(torch.zeros(2, 2), torch.zeros(2),
+                                    torch.tensor([0]), torch.tensor([1]),
+                                    donor_retention=1.1)
+
+
 def test_empty_split_is_no_op():
     sums = torch.randn(4, 3)
     counts = torch.randn(4)

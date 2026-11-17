@@ -334,7 +334,9 @@ def fit_gpu(
                         sse_ema[tgt] = hsse
                         sse_ema[src] = hsse
                     if is_final_ep and cfg.reset_pass_on_split:
-                        invalidate_split_statistics(pass_sums, pass_counts, src, tgt)
+                        invalidate_split_statistics(
+                            pass_sums, pass_counts, src, tgt, cfg.donor_pass_retention
+                        )
                     total_splits += n_sp
 
             step += 1

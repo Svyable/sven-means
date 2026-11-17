@@ -98,6 +98,8 @@ def smeans(
         If True, return an `SMeansResult` dataclass; otherwise return `centroids`.
     """
     cfg = config if config is not None else SMeansConfig()
+    if not 0.0 <= float(cfg.donor_pass_retention) <= 1.0:
+        raise ValueError("donor_pass_retention must be between 0 and 1")
     if isinstance(x, torch.Tensor):
         xt = x
     else:
