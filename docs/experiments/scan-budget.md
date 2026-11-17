@@ -77,3 +77,30 @@ python -m pytest -q tests/test_scan_budget.py
 python benchmarks/scan_budget_study.py --dataset all-offline --output /tmp/scan-offline.json
 python benchmarks/scan_budget_study.py --dataset news_lsa --output /tmp/scan-documents.json
 ```
+
+
+## Observed paired results — first full-curve CI run
+
+Source: [GitHub Actions 44001747114](https://github.com/Svyable/sven-means/actions/runs/44001747114), with downloadable full per-seed JSON, original training/test dataset SHA-256 hashes, environment metadata and all seven probe-count operating points. Both jobs passed. Each row compares **local-direction revival with our own global-revival default** on 2 independent data seeds × 4 model seeds.
+
+Positive gain means more exact top-10 neighbors are contained in the scanned candidate sets **at the same expected scan fraction**. Interpolated points are expected values of a randomized whole-list probe policy, not deterministic per-query scan limits.
+
+| Dataset | Held-out MSE gain (%) | Candidate recall gain at 5% scan (points) | At 10% scan | At 15% scan |
+|---|---:|---:|---:|---:|
+| Rotated synthetic | +1.10 | +1.17 | +0.14 | +0.00 |
+| Zipf synthetic | +0.62 | +9.10 | +2.27 | −3.16 |
+| Real digits (standardized) | −4.44 | +0.10 | −0.06 | +0.29 |
+| Real breast-cancer features | −0.03 | **−5.29** | **−4.99** | −2.48 |
+| Real 20 Newsgroups LSA documents | **+0.96** | **+1.99** | +0.80 | +0.53 |
+
+Across the real document-vector eight-pair set, local revival improved MSE in **7/8** runs and recall at 5% expected scan in **7/8** runs, with ~**1.21× median training time**. On Zipf, local revival actually improves recall at small scan budgets, despite its poor fixed-four-probe recall, because the local method scans fewer candidates per probe. The advantage reverses at higher budgets. On real breast-cancer feature vectors, the same local policy materially *loses* cost-normalized recall at small scan budgets despite an apparent fixed-probe gain.
+
+### Reset-both confound verified
+
+On Zipf, global reset-both increased fixed-four-probe candidate recall by **+11.82 percentage points**, but increased mean scan fraction by **+5.82 points**. At equal expected scan fraction its benefit shrinks to **+0.52 points** by 25% scan, and ~zero by 50%; at 10% scan its mean effect is **−5.22 points** over six comparable pairs (two others lack a valid whole-list operating point that low). Thus fixed-nprobe gains must not be marketed as performance gains.
+
+### Research and release decision
+
+**Keep cluster-local residual revival opt-in.** The LSA document-vector result is a legitimate positive research observation but not universal: raw real-digit distortion and breast-cancer low-scan recall get worse, and the CPU fit takes ~20% longer. Report full Pareto curves, not a single cherry-picked operating point. Reconfirm on independent pretrained vector embeddings (semantic, visual, multimodal), at multiple k and memory/compute budgets, then benchmark a real FAISS IVF index.
+
+No current evidence justifies claiming that the fork beats Meta e-means across GPU efficiency, billion-scale feasibility, or retrieval quality. The full curve and negative cases are essential parts of the result.
