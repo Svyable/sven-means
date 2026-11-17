@@ -71,3 +71,34 @@ pytest -q tests/test_lloyd_diagnostic.py
 python -m benchmarks.lloyd_diagnostic --dataset banking77 --output /tmp/lloyd-banking.json
 python -m benchmarks.lloyd_diagnostic --dataset 20news --output /tmp/lloyd-news.json
 ```
+
+
+## Observed direct Meta / FAISS CPU comparison (November 17, 2026 UTC)
+
+[Actions run 44022848657](https://github.com/Svyable/sven-means/actions/runs/44022848657) passed the pinned Meta NumpyEmeans smoke test and the BANKING77/20 Newsgroups real-neural benchmark jobs. Each corpus has two independent document selections × two optimizer seeds (**4 paired fits per arm**). Every arm uses the **same** neural model/data and identical FAISS IndexIVFFlat evaluation, with full per-seed raw JSON and environment versions archived.
+
+The following figures are **relative to Sven global with zero additional Lloyd updates**. A positive percentage means lower held-out SSE; positive percentage points mean better real FAISS recall@10 at the same **expected 10% database vectors scanned**. Time ratios are median total centroid-fit wall times relative to Sven global; all extra Lloyd updates have been charged for their initial assignment, mean update and reassignment.
+
+| Method | 20 Newsgroups MSE gain | 20 Newsgroups recall gain | 20 Newsgroups fit time | BANKING77 MSE gain | BANKING77 recall gain | BANKING77 fit time |
+|---|---:|---:|---:|---:|---:|---:|
+| Sven global + 1 Lloyd | +1.072% | +5.080 pp | 1.417× | +0.632% | +0.338 pp | 1.557× |
+| Sven global + 2 Lloyd | +1.502% | +7.437 pp | 1.785× | +0.833% | +0.504 pp | 1.967× |
+| Sven local + 0 Lloyd | +3.278% | +11.769 pp | 1.152× | −0.501% | −0.420 pp | 1.195× |
+| Sven local + 1 Lloyd | +3.658% | +12.242 pp | 1.497× | −0.047% | −0.026 pp | 1.677× |
+| Sven local + 2 Lloyd | +3.774% | +12.401 pp | 1.795× | +0.295% | +0.156 pp | 2.002× |
+| **Meta FAIR NumpyEmeans, 2 epochs** | **+4.489%** | **+13.775 pp** | **0.640×** | −1.464% | −0.220 pp | 0.664× |
+| Meta FAIR NumpyEmeans, 5 epochs | +4.431% | +15.478 pp | 1.030× | **+0.919%** | +0.214 pp | 1.131× |
+| FAISS Lloyd, 2 iterations | +3.694% | **+16.108 pp** | **0.080×** | −4.609% | −0.782 pp | **0.174×** |
+| FAISS Lloyd, 20 iterations | +4.526% | +17.976 pp | 0.463× | −1.284% | +0.008 pp | 1.185× |
+
+### Interpretation
+
+- On 20 Newsgroups, Sven local+2 Lloyd still has **worse MSE and recall** than the *actual* pinned Meta NumpyEmeans at two epochs, while using ~**2.8× Meta's CPU fit time**. FAISS Lloyd at two iterations wins recall at a tiny fraction of Sven's wall clock. **No general superiority claim is supportable.**
+- On BANKING77, two Lloyd steps applied to Sven global improve MSE and recall over Sven global, but almost **double total fit time**. Meta five-epoch improves distortion further for less time, while the strongest candidate-recall at 10% scan in this table is Sven global+2 Lloyd, with limited paired trials. This is a tradeoff, not dominance.
+- One/two classical Lloyd refinements do help centroid quality somewhat but **do not close the competitive quality–time gap**. The next scientifically valuable target is initialization and training dynamics, not a cleanup-only default.
+- The 5-epoch Meta and 20-iteration FAISS arms are intentionally *different-budget reference points*. This table reports measured wall clock, not an assertion that one epoch equals one Lloyd iteration or that cross-language implementation timings will scale similarly to GPU.
+- These two corpora have already been used for exploratory work and cannot be reused as a fresh confirmatory dataset. The previous GSM8K corpus has also now been examined. Publication requires a new pretrained-embedding domain, adequate uncertainty estimates, pinned-source Meta comparison at equal time, and independently tested GPU memory/speed.
+
+### Full provenance
+
+Meta FAIR source revision `c8f283867285af547db7a701c1b8dfa89631b3ea` is sparse-checked-out into the test job and imported as **Meta's own** `NumpyEmeans`; no equivalent was reimplemented. Frozen MiniLM SHA `1110a243fdf4706b3f48f1d95db1a4f5529b4d41` and BANKING77 SHA `1846984189f2bc0ac51c6fc3a600fa9e1714e0c6`. Each Actions artifact records complete per-seed observations, including per-nprobe search time and scanned candidate fractions.
