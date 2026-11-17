@@ -19,6 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Pin Meta FAIR e-means reference source
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -28,6 +37,17 @@ jobs:
           python -m pip install faiss-cpu==1.16.0
       - name: Test exact training-SSE monotonicity
         run: python -m pytest -q tests/test_lloyd_diagnostic.py
+      - name: Test pinned real Meta NumpyEmeans import and 2-pass smoke
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from benchmarks.lloyd_diagnostic import train_meta_emeans
+          x=np.random.default_rng(12).normal(size=(160,16)).astype("float32")
+          centers,ms=train_meta_emeans(x,8,seed=2,epochs=2)
+          assert centers.shape==(8,16)
+          assert np.isfinite(centers).all() and ms > 0
+          print("Pinned Meta NumpyEmeans verified:",centers.shape)
+          PY
 
   banking:
     needs: unit
@@ -35,6 +55,15 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Pin Meta FAIR e-means reference source
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -68,6 +97,15 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Pin Meta FAIR e-means reference source
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
