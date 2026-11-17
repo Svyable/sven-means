@@ -14,6 +14,9 @@ class SMeansConfig:
 
     revive_thresh: float = 0.1
     revive_stop_frac: float = 0.85
+    revive_protection: str = "none"  # experimental "distance" guard, CPU only
+    revive_near_factor: float = 4.0
+    revive_abandon_epochs: float = 2.0
     split_mult: float = 0.55
     revive_geometry: str = "global"  # experimental "local_direction" on CPU only
     local_beta: float = 0.85

@@ -8,6 +8,7 @@ import torch
 
 from ._directional import DirectionalRevival
 from ._finalization import invalidate_split_statistics
+from ._rare_guard import distance_aware_removable
 from ._recipe import (
     SMeansConfig,
     compute_epoch_rows,
@@ -93,6 +94,12 @@ def fit_cpu(
         raise ValueError("shuffle_mode must be 'randperm', 'feistel' or 'affine'")
     if cfg.revive_geometry not in ("global", "local_direction"):
         raise ValueError("revive_geometry must be 'global' or 'local_direction'")
+    if cfg.revive_protection not in ("none", "distance"):
+        raise ValueError("revive_protection must be 'none' or 'distance'")
+    if cfg.revive_near_factor <= 0 or not math.isfinite(cfg.revive_near_factor):
+        raise ValueError("revive_near_factor must be finite and > 0")
+    if cfg.revive_abandon_epochs <= 0 or not math.isfinite(cfg.revive_abandon_epochs):
+        raise ValueError("revive_abandon_epochs must be finite and > 0")
     if cfg.local_observe_every < 1:
         raise ValueError("local_observe_every must be >= 1")
     if cfg.local_radius_policy not in ("rms_scaled", "mean_abs"):
@@ -108,6 +115,18 @@ def fit_cpu(
     usage = torch.full((k,), recipe.init_usage, dtype=torch.float32, device=device)
     sse_ema = torch.zeros((k,), dtype=torch.float32, device=device)
     feat_scale = torch.ones((d,), dtype=torch.float32, device=device)
+    # Guard distortion is an alpha-synchronized EMA, comparable with usage.
+    guarded = cfg.revive_protection == "distance"
+    guard_distortion = (
+        torch.zeros((k,), dtype=torch.float32, device=device) if guarded else None
+    )
+    guard_last_seen = (
+        torch.zeros((k,), dtype=torch.int64, device=device) if guarded else None
+    )
+    guard_wait_steps = max(
+        1, int(math.ceil(cfg.revive_abandon_epochs * math.ceil(n / batch_size)))
+    )
+    guarded_candidate_checks = 0
 
     pass_sums = torch.zeros((k, d), dtype=torch.float64, device=device)
     pass_counts = torch.zeros((k,), dtype=torch.float64, device=device)
@@ -217,6 +236,10 @@ def fit_cpu(
             centroids = torch.where(touched[:, None], upd, centroids)
             usage = torch.where(touched, mass, usage if is_rep else retained)
             sse_ema.mul_(cfg.sse_decay).add_(batch_sse, alpha=1.0 - cfg.sse_decay)
+            if guarded:
+                assert guard_distortion is not None and guard_last_seen is not None
+                guard_distortion.mul_(1.0 - alpha).add_(batch_sse, alpha=alpha)
+                guard_last_seen[touched] = step
             dirty_c = True
 
             # Revival has two controlled options:
@@ -226,8 +249,26 @@ def fit_cpu(
             if ((step + 1) % check_every == 0) and (step <= revive_stop_step):
                 thresh = float(usage.sum().item()) * unused_thresh / max(1, k)
                 unused = usage < thresh
+                if guarded and bool(unused.any().item()):
+                    assert guard_distortion is not None and guard_last_seen is not None
+                    # Distance-aware candidate filtering adapts Weiss (2026),
+                    # arXiv:2611.18238; it is not a sven-means invention.
+                    mse_ema = guard_distortion.sum() / usage.sum().clamp_min(1e-12)
+                    eligible = distance_aware_removable(
+                        centroids, unused,
+                        mse=float(mse_ema.item()),
+                        near_factor=cfg.revive_near_factor,
+                        last_seen=guard_last_seen,
+                        step=step,
+                        abandon_steps=guard_wait_steps,
+                    )
+                    guarded_candidate_checks += int((unused & ~eligible).sum().item())
+                    targets_available = eligible
+                else:
+                    targets_available = unused
+                # Protected low-use centers are neither sources nor targets.
                 donors = (~unused) & (usage > 0.0)
-                max_splits = min(int(unused.sum().item()), int(donors.sum().item()))
+                max_splits = min(int(targets_available.sum().item()), int(donors.sum().item()))
                 if max_splits > 0:
                     if directional is not None:
                         src, delta = directional.propose(
@@ -264,7 +305,7 @@ def fit_cpu(
                         delta = rad * radem * fvec[None, :]
 
                     if n_sp > 0:
-                        tgt = torch.nonzero(unused, as_tuple=True)[0][:n_sp]
+                        tgt = torch.nonzero(targets_available, as_tuple=True)[0][:n_sp]
                         dc = centroids[src].clone()
                         half = 0.5 * usage[src]
                         centroids[tgt] = dc + delta
@@ -274,6 +315,13 @@ def fit_cpu(
                         hsse = 0.5 * sse_ema[src]
                         sse_ema[tgt] = hsse
                         sse_ema[src] = hsse
+                        if guarded:
+                            assert guard_distortion is not None and guard_last_seen is not None
+                            half_distortion = 0.5 * guard_distortion[src]
+                            guard_distortion[tgt] = half_distortion
+                            guard_distortion[src] = half_distortion
+                            guard_last_seen[tgt] = step
+                            guard_last_seen[src] = step
                         if directional is not None:
                             directional.on_split(src, tgt)
                         if is_last_pass and cfg.reset_pass_on_split:
@@ -312,6 +360,7 @@ def fit_cpu(
         "n_iter": int(step),
         "dead_clusters": int((pass_counts <= 0.5).sum().item()),
         "total_splits": int(total_splits),
+        "guarded_candidate_checks": int(guarded_candidate_checks),
         "backend": "cpu_tiled",
         "dtype": "float32",
     }

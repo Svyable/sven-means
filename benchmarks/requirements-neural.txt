@@ -1,0 +1,7 @@
+# Separate research extras. Not installed by ordinary sven-means users.
+# The CI job records exact resolved versions and model/dataset revision hashes.
+faiss-cpu==1.16.0
+sentence-transformers>=4,<6
+datasets>=3,<5
+huggingface-hub>=0.30
+scikit-learn==1.9.1
