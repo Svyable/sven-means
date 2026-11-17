@@ -63,6 +63,17 @@ The release-candidate [benchmark](benchmarks/release_candidate.py) compares
 both policies on identical data and seeds. It evaluates held-out MSE and
 a limited IVF *candidate recall* proxy (not full FAISS search performance).
 
+## Experimental donor-history retention
+
+A follow-up to the split-statistics A/B study tests **fractional preservation
+of the donor's final-pass evidence** while clearing the revived target's
+statistics. `reset_pass_on_split=True, donor_pass_retention=0.5` retains
+half of donor history; `1.0` retains all donor history (target-only reset);
+`0.0` resets both (original experimental behavior). The default remains
+`reset_pass_on_split=False`. See
+[Experiment 003](docs/experiments/donor-retention.md) for the preregistered
+comparison; it is not a generalized performance claim.
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
