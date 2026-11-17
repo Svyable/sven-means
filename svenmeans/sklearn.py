@@ -66,6 +66,9 @@ class SMeans(
         Number of mini-batches between experimental sketch updates.
     local_gain_floor : float, default=0.0
         Minimum projected per-row SSE-gain proxy for accepting a donor.
+    local_radius_policy : {"rms_scaled", "mean_abs"}, default="rms_scaled"
+        The experimental mean_abs policy uses the optimal fixed-direction,
+        fixed-assignment symmetric split distance; not guaranteed globally.
     donor_usage_w : float, default=0.35
         Weight blending SSE and usage in stochastic donor selection.
     eb_tau : float, default=0.20
@@ -114,6 +117,7 @@ class SMeans(
         "local_min_observations": [Interval(Integral, 1, None, closed="left")],
         "local_observe_every": [Interval(Integral, 1, None, closed="left")],
         "local_gain_floor": [Interval(Real, 0.0, None, closed="left")],
+        "local_radius_policy": [StrOptions({"rms_scaled", "mean_abs"})],
         "donor_usage_w": [Interval(Real, 0.0, None, closed="left")],
         "eb_tau": [Interval(Real, 0.0, None, closed="left")],
         "pass_w_span": [Interval(Real, 0.0, 1.0, closed="both")],
@@ -146,6 +150,7 @@ class SMeans(
         local_min_observations: int = 16,
         local_observe_every: int = 1,
         local_gain_floor: float = 0.0,
+        local_radius_policy: str = "rms_scaled",
         donor_usage_w: float = 0.35,
         eb_tau: float = 0.20,
         pass_w_span: float = 0.35,
@@ -174,6 +179,7 @@ class SMeans(
         self.local_min_observations = local_min_observations
         self.local_observe_every = local_observe_every
         self.local_gain_floor = local_gain_floor
+        self.local_radius_policy = local_radius_policy
         self.donor_usage_w = donor_usage_w
         self.eb_tau = eb_tau
         self.pass_w_span = pass_w_span
@@ -221,6 +227,7 @@ class SMeans(
             local_min_observations=int(self.local_min_observations),
             local_observe_every=int(self.local_observe_every),
             local_gain_floor=float(self.local_gain_floor),
+            local_radius_policy=self.local_radius_policy,
             donor_usage_w=float(self.donor_usage_w),
             eb_tau=float(self.eb_tau),
             pass_w_span=float(self.pass_w_span),
