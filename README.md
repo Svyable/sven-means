@@ -48,6 +48,21 @@ python benchmarks/compare.py --kind shifted --n 10000 --d 32 --k 128 --center-da
 
 To compare against the exact original s-means Python package, separately install upstream (distribution `s-means`, import `smeans`) and add `--baseline`. The runner uses *identical generated data and held-out evaluation* across methods, records elapsed fit times and test MSE, and emits JSON. It does not quietly attribute upstream's published results to this fork.
 
+## Experimental split-aware finalization
+
+During the final training pass, revived centroid indices can retain
+assignment statistics accumulated **before their split**. The optional
+`SMeansConfig(reset_pass_on_split=True)` invalidates only those stale
+pass statistics at each split, so the final pass averages only subsequent
+assignments for the changed centers. The unchanged algorithm remains
+the default until the paired [self-improvement study](docs/experiments/split-pass-invalidation.md)
+supports promotion. The option is wired to CPU, native CUDA, and Triton,
+though GPU speed/accuracy requires separate hardware verification.
+
+The release-candidate [benchmark](benchmarks/release_candidate.py) compares
+both policies on identical data and seeds. It evaluates held-out MSE and
+a limited IVF *candidate recall* proxy (not full FAISS search performance).
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
