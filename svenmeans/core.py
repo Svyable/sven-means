@@ -29,6 +29,12 @@ class SMeansResult:
     backend: str
     dtype: str
     guarded_candidate_checks: int = 0
+    net_proposed: int = 0
+    net_accepted: int = 0
+    net_rejected: int = 0
+    net_validation_rows: int = 0
+    net_mean_accepted_gain: float = 0.0
+    net_mean_accepted_lcb: float = 0.0
 
 
 def _resolve_device(x: torch.Tensor, device: str) -> torch.device:
@@ -167,6 +173,12 @@ def smeans(
         backend=raw["backend"],
         dtype=raw["dtype"],
         guarded_candidate_checks=raw.get("guarded_candidate_checks", 0),
+        net_proposed=raw.get("net_proposed", 0),
+        net_accepted=raw.get("net_accepted", 0),
+        net_rejected=raw.get("net_rejected", 0),
+        net_validation_rows=raw.get("net_validation_rows", 0),
+        net_mean_accepted_gain=raw.get("net_mean_accepted_gain", 0.0),
+        net_mean_accepted_lcb=raw.get("net_mean_accepted_lcb", 0.0),
     )
 
 

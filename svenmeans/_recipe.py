@@ -17,6 +17,11 @@ class SMeansConfig:
     revive_protection: str = "none"  # experimental "distance" guard, CPU only
     revive_near_factor: float = 4.0
     revive_abandon_epochs: float = 2.0
+    revive_acceptance: str = "none"  # experimental "net_holdout" CPU-only
+    net_validation_fraction: float = 0.10
+    net_lcb_z: float = 1.645
+    net_min_gain: float = 0.0
+    net_max_proposals: int = 4
     split_mult: float = 0.55
     revive_geometry: str = "global"  # experimental "local_direction" on CPU only
     local_beta: float = 0.85

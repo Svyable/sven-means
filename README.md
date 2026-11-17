@@ -121,6 +121,21 @@ scanned. **SOAR is Google's NeurIPS 2023 method, not invented here.**
 The normal `svenmeans` clustering algorithm and default interface
 do not change.
 
+## Independent holdout net-SSE revival (experimental)
+
+`SMeansConfig(revive_acceptance="net_holdout")` reserves 10% of the
+input *before training* and evaluates proposed centroid replacements on
+those unused rows, accounting for the loss of the old target cluster.
+Each proposed replacement is accepted only if a heuristic lower-bound
+estimate of **net** SSE reduction is positive. See
+[Experiment 011](docs/experiments/net-replacement.md) for the
+eight-arm independent-holdout study, negative results and limitations.
+The bound is **not a statistical confidence guarantee**, because the
+same holdout is reused adaptively. This is a CPU-only research option,
+not a general or novel split–merge method. All existing defaults remain
+unchanged; a fair comparison trains controls on the same reduced
+training subset.
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
