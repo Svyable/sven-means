@@ -1,0 +1,94 @@
+name: RAIRS AIR-vs-SOAR formula baselines on real FAISS
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/rair_assignment.py'
+      - 'benchmarks/rair_comparison.py'
+      - 'tests/test_rair_assignment.py'
+      - '.github/workflows/rair-comparison.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FAISS
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Validate formula, strict/abstaining assignments and IVF correctness
+        run: |
+          python -m pytest -q tests/test_rair_assignment.py tests/test_orthogonal_spill.py
+
+  lsa:
+    needs: invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin actual Meta e-means reference
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Four-way real LSA RAIR/SRAIR/SOAR/index comparison
+        run: python -m benchmarks.rair_comparison --dataset news_lsa --output /tmp/rair-lsa.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rair-lsa
+          path: /tmp/rair-lsa.json
+          retention-days: 30
+
+  zipf:
+    needs: invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin actual Meta e-means reference
+        uses: actions/checkout@v4
+        with:
+          repository: facebookresearch/faiss
+          ref: c8f283867285af547db7a701c1b8dfa89631b3ea
+          path: faiss-meta
+          sparse-checkout: |
+            contrib/e_means
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Zipf stress-test same storage and scans
+        run: python -m benchmarks.rair_comparison --dataset zipf --output /tmp/rair-zipf.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rair-zipf
+          path: /tmp/rair-zipf.json
+          retention-days: 30
