@@ -67,6 +67,11 @@ The proposal `c ± ρq` is chosen using the conditional SSE-gain proxy
 `usage × max(0, 2ρ E|r·q| - ρ²)`. A cold/uninformative cluster is not
 split under this policy.
 
+The experimental sketch defaults to one update every four batches, based
+on paired CPU ablations; the analytic mean-absolute radius is available
+but did not consistently outperform RMS scaling. See the
+[measured experiment log](docs/experiments/local-direction-2026-11-16.md).
+
 This is an **experiment, not a recommended default**. The gain proxy is
 in-sample, based on changing centroids and directions; it does not prove a
 held-out improvement. No GPU/Triton implementation is claimed: requesting

@@ -114,9 +114,9 @@ class DirectionalRevival:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return eligible donor IDs and unit-direction-scaled perturbations.
 
-        Score = usage * max(0, 2*rho*E|z| - rho**2), with rho given by
-        split_mult * sqrt(E[z**2]). This targets expected SSE reduction
-        rather than raw cluster count or unprojected distortion.
+        Score = usage * max(0, 2*rho*E|z| - rho**2), using either
+        split_mult * sqrt(E[z**2]) or E|z| for the split radius. This
+        proxies SSE reduction rather than using raw donor counts.
         """
         if n_requested < 0 or split_mult < 0 or gain_floor < 0:
             raise ValueError("n_requested, split_mult, gain_floor must be nonnegative")

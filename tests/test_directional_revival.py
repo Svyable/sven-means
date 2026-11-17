@@ -156,6 +156,13 @@ def test_sklearn_exposes_local_parameters():
     assert est.get_params()["revive_geometry"] == "local_direction"
 
 
+def test_experimental_defaults_preserve_global_policy():
+    cfg = SMeansConfig()
+    assert cfg.revive_geometry == "global"
+    assert cfg.local_observe_every == 4
+    assert cfg.local_radius_policy == "rms_scaled"
+
+
 def test_sketch_observation_stride_is_deterministic():
     x = torch.randn(900, 6, generator=torch.Generator().manual_seed(19))
     cfg = SMeansConfig(revive_geometry="local_direction", local_observe_every=4)

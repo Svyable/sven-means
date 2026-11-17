@@ -1,7 +1,10 @@
 # Experimental rank-one, gain-gated revival
 
 **Status:** opt-in and CPU-only. The established global-variance algorithm
-remains the default. This is not a claim of better test MSE.
+remains the default. This is not a claim of better test MSE. CPU ablations
+favored updating the experimental sketch every four mini-batches, while
+the closed-form mean-absolute split radius did not improve held-out MSE
+consistently. Both policies remain available for experiments.
 
 ## Motivation
 

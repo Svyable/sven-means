@@ -18,7 +18,7 @@ class SMeansConfig:
     revive_geometry: str = "global"  # experimental "local_direction" on CPU only
     local_beta: float = 0.85
     local_min_observations: int = 16
-    local_observe_every: int = 1
+    local_observe_every: int = 4
     local_gain_floor: float = 0.0
     local_radius_policy: str = "rms_scaled"  # "mean_abs" is conditional SSE-optimal
     donor_usage_w: float = 0.35

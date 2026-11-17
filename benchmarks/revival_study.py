@@ -143,7 +143,7 @@ def main():
     parser.add_argument("--seeds", type=int, default=5)
     parser.add_argument("--data-seed", type=int, default=2026)
     parser.add_argument("--threads", type=int, default=2)
-    parser.add_argument("--observe-every", type=int, default=1)
+    parser.add_argument("--observe-every", type=int, default=4)
     parser.add_argument("--radius-policy", choices=["rms_scaled", "mean_abs"],
                         default="rms_scaled")
     parser.add_argument("--output", type=Path)

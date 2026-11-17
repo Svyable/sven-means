@@ -62,7 +62,7 @@ class SMeans(
         Direction and projected-moment exponential smoothing.
     local_min_observations : int, default=16
         Minimum cumulative assigned observations before proposing a local split.
-    local_observe_every : int, default=1
+    local_observe_every : int, default=4
         Number of mini-batches between experimental sketch updates.
     local_gain_floor : float, default=0.0
         Minimum projected per-row SSE-gain proxy for accepting a donor.
@@ -148,7 +148,7 @@ class SMeans(
         revive_geometry: str = "global",
         local_beta: float = 0.85,
         local_min_observations: int = 16,
-        local_observe_every: int = 1,
+        local_observe_every: int = 4,
         local_gain_floor: float = 0.0,
         local_radius_policy: str = "rms_scaled",
         donor_usage_w: float = 0.35,
