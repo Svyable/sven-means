@@ -67,8 +67,9 @@ def make_data(kind: str, n: int, d: int, k: int, seed: int):
 
 
 def run_one(train, test, n_clusters: int, nepochs: float, seed: int,
-            geometry: str, center_data: bool):
-    config = SMeansConfig(revive_geometry=geometry, center_data=center_data)
+            geometry: str, center_data: bool, observe_every: int):
+    config = SMeansConfig(revive_geometry=geometry, center_data=center_data,
+                          local_observe_every=observe_every)
     start = time.perf_counter()
     result = smeans(train, n_clusters, nepochs=nepochs, seed=seed,
                     device="cpu", config=config, compute_labels=False,
@@ -98,6 +99,7 @@ def evaluate(kind: str, args):
             rows.append(run_one(
                 train, test, args.k, args.epochs, seed, geometry,
                 center_data=(kind == "shifted"),
+                observe_every=args.observe_every,
             ))
     paired = []
     for seed in range(args.seeds):
@@ -138,9 +140,10 @@ def main():
     parser.add_argument("--seeds", type=int, default=5)
     parser.add_argument("--data-seed", type=int, default=2026)
     parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--observe-every", type=int, default=1)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if min(args.n, args.d, args.k, args.seeds, args.threads) < 1:
+    if min(args.n, args.d, args.k, args.seeds, args.threads, args.observe_every) < 1:
         parser.error("n,d,k,seeds,threads must be positive")
     if args.n < args.k or args.epochs <= 0:
         parser.error("n >= k and epochs > 0 required")
