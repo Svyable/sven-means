@@ -75,14 +75,14 @@ def fit_centers(train, k, epochs, seed, model):
         native.train(train)
         centers = native.centroids
     elif model == "meta_emeans2":
-        import faiss.contrib
+        from faiss import contrib as faiss_contrib
         dirname = Path(__file__).resolve().parents[1]/"faiss-meta"/"contrib"
         if not dirname.is_dir():
             raise RuntimeError(
                 "Meta e-means pinned source missing; check out "
                 "facebookresearch/faiss@c8f283867285af547db7a701c1b8dfa89631b3ea"
             )
-        faiss.contrib.__path__.insert(0, str(dirname))
+        faiss_contrib.__path__.insert(0, str(dirname))
         from faiss.contrib.e_means import NumpyEmeans
 
         meta = NumpyEmeans(
