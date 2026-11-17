@@ -86,6 +86,16 @@ cluster-local directional splitting helps on rare-group data. The current
 default remains `revive_protection="none"`, and no GPU support is claimed.
 See [Experiment 006](docs/experiments/rare-cluster-guard.md).
 
+## Development experiment: train-only power-priced IVF routing
+
+A separate [Experiment 007](docs/experiments/power-routing.md) tests
+calibrated additive centroid prices for balancing inverted-list
+occupancy while limiting extra *training assignment* distortion to
+1%. The implementation uses an exact one-coordinate FAISS embedding
+of a **known power diagram** and a bounded-error dual-price heuristic;
+none of this mathematical prior art is claimed as Sven's invention.
+Ordinary sven-means fitting, default centroids and routing are unchanged.
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
