@@ -74,6 +74,18 @@ half of donor history; `1.0` retains all donor history (target-only reset);
 [Experiment 003](docs/experiments/donor-retention.md) for the preregistered
 comparison; it is not a generalized performance claim.
 
+## Optional protection for rare, isolated clusters (attributed research)
+
+`SMeansConfig(revive_protection="distance")` enables an experimental
+CPU-only guard that avoids recycling a low-count centroid far from every
+other centroid, except after prolonged abandonment. **The underlying
+distance-aware revival rule is from Eyal Weiss (2026),
+[arXiv:2611.18238](https://arxiv.org/abs/2611.18238), not invented here.**
+The research question is whether combining it with Sven's optional
+cluster-local directional splitting helps on rare-group data. The current
+default remains `revive_protection="none"`, and no GPU support is claimed.
+See [Experiment 006](docs/experiments/rare-cluster-guard.md).
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
