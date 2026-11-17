@@ -80,3 +80,26 @@ BANKING77 neural pilot splits are no longer unseen.
 A final deployment study must replace O(nk) calibration storage by
 streaming/approximate assignments and measure GPU/FAISS memory and
 timing at much larger n,k.
+
+
+## Observed exploratory results (November 17, 2026 UTC)
+
+[CI run 44021411968](https://github.com/Svyable/sven-means/actions/runs/44021411968) passed all power-routing invariant tests and both real/experimental benchmark jobs. The results compare each priced option with the **same** centroids and plain (zero-priced) routing, with two source seeds × three optimizer seeds (**6 paired cases** per workload). All five families use *actual FAISS IndexIVFFlat* candidate scanning, and recall is interpolated to an equal expected **10% of training vectors scanned**. A positive gain means better recall, not just better fixed-nprobe coverage.
+
+| Workload | Global-price list CV improvement | Global-price recall@10 gain (pp) | Local-price list CV improvement | Local-price recall@10 gain (pp) |
+|---|---:|---:|---:|---:|
+| Rotated synthetic | +0.159 | **−0.067** | +0.138 | +0.003 |
+| Zipf synthetic | +0.369 | **+1.921** | +0.216 | **−0.902** |
+| Real digits | +0.112 | **−0.183** | +0.099 | **−0.156** |
+| Real breast-cancer features | +0.115 | **−0.221** | +0.096 | +0.432 |
+| 20 Newsgroups LSA document vectors | +0.271 | **−0.282** | +0.279 | **−1.139** |
+
+Pricing reliably **reduced list-size dispersion**, but often **reduced retrieval quality** at the same expected candidate cost. Its extra calibration time was approximately 11–67 milliseconds in these small CPU experiments, beyond clustering fit time. All methods share the **same train-only ≤1% additional squared assignment error budget**. Full per-seed, curve, CV, timing and distortion records are downloadable from the cited CI run.
+
+### Decision and publication boundary
+
+The hypothesis that reducing list imbalance while bounding mean training-assignment distortion would generally improve FAISS nearest-neighbor recall is **falsified by this dataset collection**. Power pricing is **not recommended as a default**, especially for the local-direction centroids where it lost −1.139 pp on real LSA documents at a 10% expected scan budget. The +1.921 pp Zipf gain is only on a synthetic skewed workload and is not evidence of general superiority.
+
+The likely missing ingredient is *local nearest-neighbor affinity*: a balanced partition can split semantically or geometrically close points across list boundaries. A future experiment should account for candidate-neighbor preservation using a train-only surrogate while reporting the resulting distortions and overhead. That would be a **new exploratory hypothesis** selected after observing this study, not a preregistered result or a claim to invent power diagrams.
+
+These development datasets already informed earlier Sven experiments. Independent 384D pretrained neural embeddings and fair FAISS/Meta baseline comparisons remain necessary. No publication or deployment claims about throughput, GPU scaling, or billions of vectors follow from these results.
