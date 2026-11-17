@@ -44,6 +44,15 @@ def test_projected_gain_matches_exact_two_center_sse_improvement():
     assert actual.item() > 3.1
 
 
+def test_zero_residual_batch_cannot_destroy_direction():
+    tracker = make_tracker(k=1, d=3, beta=0.0)
+    old = tracker.q.clone()
+    tracker.observe(torch.zeros(5, 3), torch.zeros(5, dtype=torch.int64),
+                    torch.zeros(1, 3), torch.tensor([5.]))
+    assert torch.allclose(tracker.q, old, atol=1e-6)
+    assert tracker.q.norm().item() > 0.99
+
+
 def test_learns_rotated_residual_direction_with_rank_one_sketch():
     rng = torch.Generator().manual_seed(42)
     t = torch.randn(1000, 1, generator=rng) * 5.0
