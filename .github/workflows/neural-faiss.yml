@@ -53,12 +53,15 @@ jobs:
           TOKENIZERS_PARALLELISM: "false"
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
+          python -m pip freeze > /tmp/neural-resolved-requirements.txt
           python -m benchmarks.neural_faiss --dataset banking77 --n-train 1600 --n-test 160 --data-seeds 2 --model-seeds 3 --clusters 64 --epochs 2 --threads 2 --output /tmp/neural-banking.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: faiss-neural-banking77
-          path: /tmp/neural-banking.json
+          path: |
+            /tmp/neural-banking.json
+            /tmp/neural-resolved-requirements.txt
           retention-days: 30
 
   news:
@@ -84,10 +87,13 @@ jobs:
           TOKENIZERS_PARALLELISM: "false"
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
+          python -m pip freeze > /tmp/neural-resolved-requirements.txt
           python -m benchmarks.neural_faiss --dataset 20news --n-train 1600 --n-test 160 --data-seeds 2 --model-seeds 3 --clusters 64 --epochs 2 --threads 2 --output /tmp/neural-20news.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: faiss-neural-20news
-          path: /tmp/neural-20news.json
+          path: |
+            /tmp/neural-20news.json
+            /tmp/neural-resolved-requirements.txt
           retention-days: 30

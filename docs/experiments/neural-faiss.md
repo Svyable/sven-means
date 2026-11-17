@@ -80,3 +80,77 @@ pytest -q tests/test_neural_faiss.py
 python -m benchmarks.neural_faiss --dataset banking77 --output /tmp/banking.json
 python -m benchmarks.neural_faiss --dataset 20news --output /tmp/news.json
 ```
+
+
+## Initial pilot findings (GitHub Actions 44020029870, 2026-11-17 UTC)
+
+The first unseen-embedding run **completed all three CI jobs successfully**:
+synthetic FAISS invariant tests, independent BANKING77 and independent 20
+Newsgroups neural embeddings. [CI and complete raw JSON artifacts](https://github.com/Svyable/sven-means/actions/runs/44020029870).
+
+This is a CPU pilot, *not* a breakthrough claim against FAISS/Meta e-means.
+The model SHA used in that run is
+`1110a243fdf4706b3f48f1d95db1a4f5529b4d41` (Apache-2.0);
+BANKING77 dataset SHA is
+`1846984189f2bc0ac51c6fc3a600fa9e1714e0c6` (CC BY 4.0).
+Both revisions are now frozen in the benchmark source rather than
+re-resolved from live `main`. Vectors have 384 dimensions and L2-unit norm.
+
+Results below compare the *same 2-epoch Sven local* against the
+*same 2-epoch Sven global default*; each corpus has two independently
+drawn document subsets, each evaluated with three centroid seeds
+(**six paired fits per corpus**, not six independent corpora).
+Positive MSE improvement means smaller squared error; positive FAISS
+recall change means more exact top-10 neighbors found by real IVF-Flat
+search at the *same expected fraction of candidate vectors scanned*.
+
+| Corpus | Sven local MSE improvement | Real FAISS recall@10 gain at 10% expected scan | Local/global CPU fit time |
+|---|---:|---:|---:|
+| 20 Newsgroups, pretrained 384D vectors | **+3.86%** (6/6 wins) | **+13.71 percentage points** (6/6 wins) | ~1.18× |
+| BANKING77, pretrained 384D vectors | **−0.43%** (2/6 wins) | **−0.24 percentage points** | ~1.18× |
+
+**20 Newsgroups cannot be compared at 5% expected scans** in the chosen
+full-list nprobe grid: the global baseline's smallest observable mean
+scan fraction is ~6–7%. Values below that are **unavailable, not zero**.
+
+### A much stronger classical baseline
+
+On *20 Newsgroups*, the native FAISS **two-iteration** k-means arm
+improved held-out MSE by ~4.15% and scan-matched recall@10 by ~18.12
+percentage points relative to Sven global, while training in ~0.18×
+the CPU time. FAISS's 20-iteration arm yielded even lower MSE and still
+higher recall, at a different compute budget. Thus Sven local is **not**
+the best method here, despite improving substantially over Sven global.
+
+On BANKING77, Sven global had lower MSE than both two-iteration and
+twenty-iteration FAISS k-means on average; Sven local did not
+consistently improve it. Report this cross-domain reversal rather
+than claiming universal superiority.
+
+### Mechanism worth testing, not yet established causally
+
+In the 20 Newsgroups first data split, the mean fraction of training
+vectors scanned by **one** probed IVF list was ~6.0% for Sven global,
+~3.1% for Sven local, and ~1.9% for FAISS's two-iteration k-means.
+The second split showed ~7.3%, ~3.1%, and ~2.2% respectively.
+The large recall improvement at fixed scan work could thus partly
+reflect a **more balanced inverted-list occupancy distribution**
+rather than a better quantization direction by itself.
+
+These pilot results motivate a separate cluster-occupancy diagnostic
+with list-size dispersion, underfilled/overfull groups and scan
+Pareto curves. Do not mistake *fixed nprobe* for fixed search work.
+Do not tune parameters on these corpus splits and then report them
+as fresh independent test data.
+
+### Required to justify publication
+
+- Compare with pinned Meta `faiss.contrib.e_means` at matched
+  quality/time and with fixed seeding, not only FAISS Lloyd k-means.
+- Expand to multiple independent pretrained encoders/corpora and
+  at least 10 independent data splits.
+- Test larger k, dataset sizes and actual GPU Triton/CUDA hardware,
+  with memory peaks and full search latency/recall curves.
+- Distinguish observations borrowed from Eyal Weiss (2026)
+  distance-aware revival work, cited in Experiment 006, from any
+  future independently validated contribution.

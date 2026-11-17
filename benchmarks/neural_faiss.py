@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from importlib.metadata import version as package_version
 import json
 import platform
 import statistics
@@ -33,7 +34,10 @@ from benchmarks.scan_budget import interpolated_recall_at_budget
 from svenmeans import SMeansConfig, assign_clusters, smeans
 
 MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# First pilot resolved these immutable revisions. Freeze them for replication.
+MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 BANKING = "PolyAI/banking77"
+BANKING_REVISION = "1846984189f2bc0ac51c6fc3a600fa9e1714e0c6"
 PROBES = (1, 2, 4, 8, 16, 32, 64, 96)
 BUDGETS = (0.05, 0.10, 0.15, 0.25)
 KNN = 10
@@ -67,9 +71,7 @@ def load_texts(dataset: str, n_train: int, n_queries: int, seed: int):
     rng = np.random.default_rng(seed)
     if dataset == "banking77":
         from datasets import load_dataset
-        from huggingface_hub import HfApi
-
-        revision = HfApi().dataset_info(BANKING).sha
+        revision = BANKING_REVISION
         train_source = load_dataset(BANKING, split="train", revision=revision)
         query_source = load_dataset(BANKING, split="test", revision=revision)
         train = _unique_documents(train_source["text"], n_train, rng)
@@ -106,10 +108,9 @@ def load_texts(dataset: str, n_train: int, n_queries: int, seed: int):
 
 
 def embed_texts(train_texts, test_texts, *, batch_size: int):
-    from huggingface_hub import HfApi
     from sentence_transformers import SentenceTransformer
 
-    pinned_revision = HfApi().model_info(MODEL).sha
+    pinned_revision = MODEL_REVISION
     t0 = time.perf_counter()
     encoder = SentenceTransformer(
         MODEL, revision=pinned_revision, device="cpu", trust_remote_code=False
@@ -242,16 +243,9 @@ def make_centers(train, k, epochs, seed, arm):
     centers = np.ascontiguousarray(centers, dtype=np.float32)
     if centers.shape != (k, train.shape[1]):
         raise AssertionError("unexpected center shape")
-    labels, sq = assign_clusters(torch.from_numpy(test_dummy(train)), torch.from_numpy(centers))
-    # Above checks distance correctness on a real training row only; held-out
-    # distortion is measured separately below. No access to test here.
-    if not torch.isfinite(sq).all():
-        raise AssertionError("nonfinite training sample distance")
+    if not np.isfinite(centers).all():
+        raise AssertionError("nonfinite centroids")
     return centers, fit_ms, splits
-
-
-def test_dummy(train):
-    return train[:1]
 
 
 def train_and_measure(train, test, k, epochs, seed, arm, exact_ids):
@@ -347,6 +341,9 @@ def main():
             "torch": torch.__version__, "numpy": np.__version__,
             "scikit_learn": sklearn.__version__,
             "faiss": getattr(faiss, "__version__", "unknown"),
+            "sentence_transformers": package_version("sentence-transformers"),
+            "datasets": package_version("datasets"),
+            "huggingface_hub": package_version("huggingface-hub"),
             "threads": args.threads,
         },
         "settings": {k: str(v) if isinstance(v, Path) else v
