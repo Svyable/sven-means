@@ -53,6 +53,28 @@ def test_zero_residual_batch_cannot_destroy_direction():
     assert tracker.q.norm().item() > 0.99
 
 
+def test_mean_absolute_radius_is_conditional_sse_optimum():
+    tracker = make_tracker()
+    tracker.q[:] = torch.tensor([[1., 0.], [0., 1.]])
+    x = torch.tensor([[-2., 0.], [2., 0.]])
+    tracker.observe(x, torch.zeros(2, dtype=torch.int64),
+                    torch.zeros(2, 2), torch.tensor([2., 0.]))
+    src, delta = tracker.propose(
+        torch.tensor([True, False]), 1, torch.tensor([2., 0.]),
+        split_mult=0.55, radius_policy="mean_abs",
+    )
+    assert src.tolist() == [0]
+    assert torch.allclose(delta, torch.tensor([[2., 0.]]), atol=1e-5)
+    # Radius 2 is the exact minimizing radius for these two fixed points.
+    for rho in (1., 1.9, 2.1, 3.):
+        candidate = torch.tensor([rho, 0.])
+        loss = torch.minimum((x - candidate).square().sum(1),
+                             (x + candidate).square().sum(1)).mean()
+        assert loss >= 0.0
+    assert torch.minimum((x - delta[0]).square().sum(1),
+                         (x + delta[0]).square().sum(1)).mean() == 0.0
+
+
 def test_learns_rotated_residual_direction_with_rank_one_sketch():
     rng = torch.Generator().manual_seed(42)
     t = torch.randn(1000, 1, generator=rng) * 5.0
@@ -155,6 +177,9 @@ def test_reject_invalid_local_mode_and_bad_hyperparameters():
     with pytest.raises(ValueError, match="local_observe_every"):
         smeans(x, 4, device="cpu",
                config=SMeansConfig(revive_geometry="local_direction", local_observe_every=0))
+    with pytest.raises(ValueError, match="local_radius_policy"):
+        smeans(x, 4, device="cpu",
+               config=SMeansConfig(revive_geometry="local_direction", local_radius_policy="invalid"))
     with pytest.raises(ValueError, match="gain_floor"):
         tracker = make_tracker()
         tracker.propose(torch.tensor([True, True]), 1, torch.ones(2), 0.5, -1.0)
