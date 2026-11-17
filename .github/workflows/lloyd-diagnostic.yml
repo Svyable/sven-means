@@ -1,0 +1,96 @@
+name: Post-smeans Lloyd refinement diagnostic
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/lloyd_diagnostic.py'
+      - 'tests/test_lloyd_diagnostic.py'
+      - '.github/workflows/lloyd-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package + faiss
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install faiss-cpu==1.16.0
+      - name: Test exact training-SSE monotonicity
+        run: python -m pytest -q tests/test_lloyd_diagnostic.py
+
+  banking:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: neural-hf-embedding-v1
+      - name: Install neural benchmark extras
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install -r benchmarks/requirements-neural.txt
+      - name: Compare post-Sven Lloyd on BANKING77
+        env:
+          TOKENIZERS_PARALLELISM: "false"
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          python -m pip freeze > /tmp/lloyd-versions.txt
+          python -m benchmarks.lloyd_diagnostic --dataset banking77 --output /tmp/lloyd-banking.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lloyd-diagnostic-banking77
+          path: |
+            /tmp/lloyd-banking.json
+            /tmp/lloyd-versions.txt
+          retention-days: 30
+
+  news:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: neural-hf-embedding-v1
+      - name: Install neural benchmark extras
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install -r benchmarks/requirements-neural.txt
+      - name: Compare post-Sven Lloyd on 20 Newsgroups
+        env:
+          TOKENIZERS_PARALLELISM: "false"
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          python -m pip freeze > /tmp/lloyd-versions.txt
+          python -m benchmarks.lloyd_diagnostic --dataset 20news --output /tmp/lloyd-news.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lloyd-diagnostic-20news
+          path: |
+            /tmp/lloyd-news.json
+            /tmp/lloyd-versions.txt
+          retention-days: 30
