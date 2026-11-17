@@ -96,6 +96,19 @@ of a **known power diagram** and a bounded-error dual-price heuristic;
 none of this mathematical prior art is claimed as Sven's invention.
 Ordinary sven-means fitting, default centroids and routing are unchanged.
 
+## Objective-aligned streaming split direction (experimental)
+
+The optional `SMeansConfig(revive_geometry="local_direction",
+local_direction_objective="split_gain", local_radius_policy="mean_abs")`
+tests a mathematical alignment: the exact fixed-assignment improvement
+from symmetric splitting is proportional to
+`(E|residual · direction|)^2`, whereas the historical covariance
+iteration optimizes `E[(residual · direction)^2]`. The new option uses
+the streaming sign-gradient of the former and retains O(kd) state.
+**L1 PCA-style gradient methods are established prior art.** See
+[Experiment 010](docs/experiments/objective-direction.md) for controlled
+comparisons, limitations and reasons to keep the existing default.
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
