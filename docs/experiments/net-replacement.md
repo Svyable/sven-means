@@ -105,3 +105,35 @@ this first prototype does not provide it.
 
 Neither split-merge net scoring, distance-aware protection nor
 a basic Gaussian confidence bound is claimed original.
+
+
+## Initial paired evidence — 2026-11-17 UTC
+
+[GitHub Actions net-replacement ablation](https://github.com/Svyable/sven-means/actions/runs/44173959142) **passed the reserved-holdout and exact top-three full-objective tests** (18 passed, 1 CUDA skip), plus paired offline/real-document studies. The full JSON contains all per-seed source hashes, acceptance/rejection decisions, candidate-recall scan curves and CPU fit times.
+
+**Interpret these as improvements over the SAME geometry unguarded arm, on the EXACT SAME fit-only 90% input.** Positive MSE gain means smaller independent test SSE. Each workload has two data draws × three optimizer seeds (six paired fits).
+
+| Dataset | Global + Weiss distance | Global + net LCB | Global + both | Local + Weiss distance | Local + net LCB | Local + both |
+|---|---:|---:|---:|---:|---:|---:|
+| Rare isolated synthetic | +18.34% | **−24.73%** | −24.73% | **+36.96%** | +15.99% | +24.00% |
+| Skewed Zipf | +0.00% | −0.79% | −0.79% | +0.00% | −0.19% | −0.19% |
+| Real digits | +5.12% | +2.74% | +2.74% | +4.47% | +2.86% | +3.98% |
+| Real breast-cancer features | +0.16% | −0.81% | −0.65% | +0.00% | −0.06% | −0.06% |
+| 20 Newsgroups LSA | +0.00% | **−3.50%** | −3.50% | +0.00% | −0.13% | −0.13% |
+
+Global net LCB rejected **40/40** proposed replacements in mean paired rare/Zipf/LSA runs, so forbidding all revivals is worse than either the default or Weiss's distance guard. The net LCB sometimes accepted many *local* proposals, but lacked a reliable independent test advantage and incurred major overhead.
+
+Median CPU fit-time ratios relative to the same-geometry unguarded control:
+- On rare islands: global net **2.07×**, local net **3.81×**; local net+distance **4.12×**.
+- On LSA documents: global net **2.25×**, local net **2.70×**.
+- On digits: global net **1.57×**, local net **1.44×**.
+
+The 10% candidate-proxy recall generally followed mixed results:
+- On LSA, global net lost **4.87 percentage points** and local net lost **0.41 points** relative to corresponding unguarded methods.
+- On rare islands the net local arm had nearly unchanged candidate recall despite its large MSE improvement; rare isolated points are too rare to dominate average recall.
+
+**Decision: no default promotion, no superiority claim.** The simple heldout-normal-LCB surrogate is often too conservative, loses useful recycling, and is costly. The specific numerical results **falsify a general quality/compute benefit** for this configuration. The published distance-aware rule remains the preferable rare-island protection on tested CPU workloads. This finding is limited to development datasets; no real 384D neural/FAISS validation was justified after these negative results.
+
+### Research follow-up, not post-hoc tuning
+
+Explaining *why* the net LCB frequently rejects all global proposals might require modeling the **future effect** of centroid relocation after subsequent training, rather than its instantaneous net SSE. Sequential reuse also undermines nominal confidence. Any new method must be registered before evaluation and compared at equal training data and wall clock. No post-hoc lowering of 1.645 or increasing proposal limits is presented as a confirmatory rescue.
