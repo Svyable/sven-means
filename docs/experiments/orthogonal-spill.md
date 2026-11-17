@@ -66,6 +66,15 @@ FAISS top-20 search heap.
   vectors). Duplicates count as additional scanned entries. Interpolate
   only between measured integer `nprobe` operating points; unavailable
   fractions remain unavailable.
+- **Tie-aware recall:** when many original vectors have exactly equal
+  query distances, FAISS IndexFlatL2 and IndexIVFFlat may legally
+  return different sets of IDs at the equal-distance top-10 boundary.
+  Record *raw ID-based recall* separately but use a deterministic
+  tolerance on the exact 10th-neighbor squared-distance radius for
+  primary scan-budget comparisons. At full nprobe=k, all returned
+  unique distances must lie within that exact boundary (within
+  documented FP32 numerical tolerance). Never waive a real distance
+  mismatch or count duplicate IDs as new neighbors.
 - Actual median 3-repeat search milliseconds/query, per-query max
   entries scanned, index build milliseconds, serialized FAISS index
   bytes, centroid training milliseconds, list occupancy CV.
