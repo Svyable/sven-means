@@ -1,0 +1,54 @@
+name: Objective-aligned split direction ablation
+on:
+  pull_request:
+    paths:
+      - 'svenmeans/**'
+      - 'tests/test_objective_direction.py'
+      - 'benchmarks/objective_direction_study.py'
+      - '.github/workflows/objective-direction.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Direction-gradient and end-to-end invariants
+        run: python -m pytest -q tests/test_objective_direction.py
+      - name: Paired covariance vs split-gain direction on offline data
+        run: python -m benchmarks.objective_direction_study --dataset all-offline --output /tmp/objective-offline.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: objective-direction-offline
+          path: /tmp/objective-offline.json
+          retention-days: 30
+  documents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Independent text-derived 96D LSA development set
+        run: python -m benchmarks.objective_direction_study --dataset news_lsa --output /tmp/objective-documents.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: objective-direction-documents
+          path: /tmp/objective-documents.json
+          retention-days: 30
