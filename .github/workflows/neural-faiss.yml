@@ -1,0 +1,99 @@
+name: Independent neural embeddings and actual FAISS IVF
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/neural_faiss.py'
+      - 'benchmarks/requirements-neural.txt'
+      - 'tests/test_neural_faiss.py'
+      - '.github/workflows/neural-faiss.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-faiss-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package and FAISS
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install "faiss-cpu>=1.9,<2"
+      - name: Verify actual IVF list accounting
+        run: python -m pytest -q tests/test_neural_faiss.py
+
+  banking77:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: synthetic-faiss-invariants
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Restore pretrained model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: neural-hf-embedding-v1
+      - name: Install neural benchmark extras
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install -r benchmarks/requirements-neural.txt
+      - name: Embed official BANKING77 train/test and test FAISS IVF
+        env:
+          TOKENIZERS_PARALLELISM: "false"
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          python -m pip freeze > /tmp/neural-resolved-requirements.txt
+          python -m benchmarks.neural_faiss --dataset banking77 --n-train 1600 --n-test 160 --data-seeds 2 --model-seeds 3 --clusters 64 --epochs 2 --threads 2 --output /tmp/neural-banking.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: faiss-neural-banking77
+          path: |
+            /tmp/neural-banking.json
+            /tmp/neural-resolved-requirements.txt
+          retention-days: 30
+
+  news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: synthetic-faiss-invariants
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Restore pretrained model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: neural-hf-embedding-v1
+      - name: Install neural benchmark extras
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install -r benchmarks/requirements-neural.txt
+      - name: Embed independent 20 Newsgroups texts and test FAISS IVF
+        env:
+          TOKENIZERS_PARALLELISM: "false"
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          python -m pip freeze > /tmp/neural-resolved-requirements.txt
+          python -m benchmarks.neural_faiss --dataset 20news --n-train 1600 --n-test 160 --data-seeds 2 --model-seeds 3 --clusters 64 --epochs 2 --threads 2 --output /tmp/neural-20news.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: faiss-neural-20news
+          path: |
+            /tmp/neural-20news.json
+            /tmp/neural-resolved-requirements.txt
+          retention-days: 30
