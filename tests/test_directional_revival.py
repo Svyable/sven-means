@@ -134,6 +134,14 @@ def test_sklearn_exposes_local_parameters():
     assert est.get_params()["revive_geometry"] == "local_direction"
 
 
+def test_sketch_observation_stride_is_deterministic():
+    x = torch.randn(900, 6, generator=torch.Generator().manual_seed(19))
+    cfg = SMeansConfig(revive_geometry="local_direction", local_observe_every=4)
+    a = smeans(x, 20, nepochs=2, device="cpu", seed=3, config=cfg)
+    b = smeans(x, 20, nepochs=2, device="cpu", seed=3, config=cfg)
+    assert torch.equal(a, b)
+
+
 def test_reject_invalid_local_mode_and_bad_hyperparameters():
     x = torch.randn(100, 4)
     with pytest.raises(ValueError, match="revive_geometry"):
@@ -144,6 +152,9 @@ def test_reject_invalid_local_mode_and_bad_hyperparameters():
     with pytest.raises(ValueError, match="min_observations"):
         smeans(x, 4, config=SMeansConfig(revive_geometry="local_direction",
                                          local_min_observations=0), device="cpu")
+    with pytest.raises(ValueError, match="local_observe_every"):
+        smeans(x, 4, device="cpu",
+               config=SMeansConfig(revive_geometry="local_direction", local_observe_every=0))
     with pytest.raises(ValueError, match="gain_floor"):
         tracker = make_tracker()
         tracker.propose(torch.tensor([True, True]), 1, torch.ones(2), 0.5, -1.0)
