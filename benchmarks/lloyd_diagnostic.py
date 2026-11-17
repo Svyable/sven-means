@@ -108,6 +108,42 @@ def train_sven(train: np.ndarray, k: int, epochs: float, seed: int, geometry: st
     )
 
 
+def meta_numpy_emeans():
+    """Resolve Meta's pinned CPU implementation, not an imitation.
+
+    CI sparse-checks out facebookresearch/faiss at the SHA recorded in
+    the workflow. Append that exact reference source to faiss.contrib's
+    module search path, rather than assuming the installed FAISS wheel
+    happens to contain the same development version.
+    """
+    import faiss.contrib
+    root = Path(__file__).resolve().parents[1]
+    source_dir = root / "faiss-meta" / "contrib"
+    if not source_dir.is_dir():
+        raise RuntimeError(
+            "Pinned Meta e-means source is missing; CI must check out "
+            "facebookresearch/faiss at revision "
+            "c8f283867285af547db7a701c1b8dfa89631b3ea"
+        )
+    faiss.contrib.__path__.insert(0, str(source_dir))
+    from faiss.contrib.e_means import NumpyEmeans
+    return NumpyEmeans
+
+
+def train_meta_emeans(train: np.ndarray, k: int, seed: int, epochs: int):
+    cls = meta_numpy_emeans()
+    started = time.perf_counter()
+    model = cls(
+        train.shape[1], k, nepochs=epochs,
+        seed=seed, verbose=False, capture_assignments=False,
+    )
+    centers, _ = model.train(np.ascontiguousarray(train, dtype=np.float32))
+    return (
+        np.ascontiguousarray(centers, dtype=np.float32),
+        (time.perf_counter() - started) * 1000,
+    )
+
+
 def train_faiss(train: np.ndarray, k: int, seed: int, iterations: int):
     start = time.perf_counter()
     model = faiss.Kmeans(
@@ -213,6 +249,15 @@ def run_dataset(name, args):
                     label=f"faiss_{iterations}", model_seed=seed,
                     fit_ms=fit_ms, refinement_ms=0.0, splits=None
                 ))
+            for epochs in (2, 5):
+                centers, fit_ms = train_meta_emeans(
+                    train, args.clusters, seed, epochs
+                )
+                rows.append(evaluate_centers(
+                    train, query, centers, exact,
+                    label=f"meta_emeans_{epochs}", model_seed=seed,
+                    fit_ms=fit_ms, refinement_ms=0.0, splits=None
+                ))
         records.append({
             "data_seed": data_seed,
             "source": provenance,
@@ -226,6 +271,8 @@ def run_dataset(name, args):
             "settings": {k: str(v) if isinstance(v, Path) else v
                          for k,v in vars(args).items()},
             "faiss_version": getattr(faiss, "__version__", "unknown"),
+            "meta_faiss_commit": "c8f283867285af547db7a701c1b8dfa89631b3ea",
+            "meta_reference_path": "faiss-meta/contrib/e_means",
             "torch_version": torch.__version__,
             "records": records,
         }, indent=2) + "\n")
