@@ -20,6 +20,7 @@ class SMeansConfig:
     local_min_observations: int = 16
     local_observe_every: int = 1
     local_gain_floor: float = 0.0
+    local_radius_policy: str = "rms_scaled"  # "mean_abs" is conditional SSE-optimal
     donor_usage_w: float = 0.35
     eb_tau: float = 0.20
     pass_w_span: float = 0.35
