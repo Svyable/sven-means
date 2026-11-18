@@ -81,6 +81,11 @@ jobs:
     needs: correctness
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Expanded post-pilot family sweep. Never choose a family by results.
+        family: [none, skip_connect, nor_conv_1x1, nor_conv_3x3, avg_pool_3x3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -100,7 +105,7 @@ jobs:
           python -m benchmarks.pareto_hardware_study \
             --hardware /tmp/nats-v2/hw_metrics.csv \
             --accuracies /tmp/nats-v2/accuracies.csv \
-            --holdout-first-op nor_conv_3x3 \
+            --holdout-first-op ${{ matrix.family }} \
             --seeds 31 51 \
             --fractions .05 .10 .20 \
             --calibration 64 \
@@ -108,7 +113,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nats-mcu-real-pareto-family-holdout
+          name: nats-mcu-real-pareto-holdout-${{ matrix.family }}
           path: |
             /tmp/pareto-hardware-family.json
             /tmp/nats-v2/source-sha256.txt
