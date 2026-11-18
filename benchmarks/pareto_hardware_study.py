@@ -324,6 +324,21 @@ def run_replay(data, *, family_to_holdout, seeds, fractions,
                     "metrics": outcome,
                 }
             trial["budget_results"].append(experiment)
+        # Standard selectors must return nested subsets at a fixed seed.
+        # Their hypervolume on the SAME oracle pool cannot decrease when
+        # granted additional evaluations. Budget-dependent grid evictions
+        # are explicitly excluded from this mathematical invariant.
+        for method in policies:
+            if method == "proxy_grid":
+                continue
+            observed_hv = [
+                row["policies"][method]["metrics"]["hypervolume_ratio"]
+                for row in trial["budget_results"]
+            ]
+            if any(v2 + 1e-9 < v1 for v1, v2 in zip(observed_hv, observed_hv[1:])):
+                raise AssertionError(
+                    f"{method} violated nested-budget Pareto hypervolume: {observed_hv}"
+                )
         report["results"].append(trial)
     return report
 
