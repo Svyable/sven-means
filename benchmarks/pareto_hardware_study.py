@@ -299,7 +299,11 @@ def run_replay(data, *, family_to_holdout, seeds, fractions,
                 chosen = choose_candidates(
                     method, features, pred, data["sizes"], family,
                     calibration, candidates, evaluation,
-                    seed=int(seed)+37*budget,
+                    # Identical stream/order for every budget makes
+                    # random, stratified, D2/k-center and rank selectors
+                    # nested. Grid capacity is budget-specific and may
+                    # evict previous cells; explicitly NOT nested.
+                    seed=int(seed)+37,
                 )
                 policy_ms = 1000*(time.perf_counter()-t0)
                 # In all-architecture mode the calibration architectures
