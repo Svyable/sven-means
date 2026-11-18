@@ -1,0 +1,115 @@
+name: Physical-hardware Pareto archive replay
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/pareto_archive.py'
+      - 'benchmarks/pareto_hardware_study.py'
+      - 'tests/test_pareto_archive.py'
+      - 'tests/test_pareto_hardware.py'
+      - 'docs/experiments/pareto-hardware.md'
+      - '.github/workflows/pareto-hardware.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install local research dependencies
+        run: python -m pip install numpy pytest
+      - name: Verify archive, oracle isolation, exact Pareto and hypervolume
+        run: python -m pytest -q tests/test_pareto_archive.py tests/test_pareto_hardware.py
+
+  measured-hardware:
+    needs: correctness
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install research dependencies
+        run: python -m pip install numpy pytest
+      - name: Fetch pinned CC-BY-4.0 NATS-Bench-MCU v2 measured dataset
+        run: |
+          mkdir -p /tmp/nats-v2
+          BASE=https://raw.githubusercontent.com/ankilab/NATS-Bench-MCU/c92adc0ec112bdee6c73358cc52f3e026367b5a0/export_corrected
+          curl --fail --location --retry 3 --silent --show-error "$BASE/hw_metrics.csv" -o /tmp/nats-v2/hw_metrics.csv
+          curl --fail --location --retry 3 --silent --show-error "$BASE/accuracies.csv" -o /tmp/nats-v2/accuracies.csv
+          sha256sum /tmp/nats-v2/hw_metrics.csv /tmp/nats-v2/accuracies.csv > /tmp/nats-v2/source-sha256.txt
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          p=Path('/tmp/nats-v2')
+          for name in ('hw_metrics.csv','accuracies.csv'):
+              with (p/name).open(newline='') as f:
+                  assert len(list(csv.DictReader(f)))==14281,name
+          print("Verified 14281 actual microcontroller measurements")
+          PY
+      - name: Replay all-family expensive evaluation (1/5/10% budgets)
+        run: |
+          python -m benchmarks.pareto_hardware_study \
+            --hardware /tmp/nats-v2/hw_metrics.csv \
+            --accuracies /tmp/nats-v2/accuracies.csv \
+            --seeds 31 51 73 \
+            --fractions .01 .05 .10 \
+            --calibration 64 \
+            --output /tmp/pareto-hardware-all.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nats-mcu-real-pareto-all-families
+          path: |
+            /tmp/pareto-hardware-all.json
+            /tmp/nats-v2/source-sha256.txt
+          retention-days: 30
+
+  heldout-family:
+    needs: correctness
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install research dependencies
+        run: python -m pip install numpy pytest
+      - name: Fetch pinned hardware metrics and accuracy (CC BY 4.0)
+        run: |
+          mkdir -p /tmp/nats-v2
+          BASE=https://raw.githubusercontent.com/ankilab/NATS-Bench-MCU/c92adc0ec112bdee6c73358cc52f3e026367b5a0/export_corrected
+          curl --fail --location --retry 3 --silent --show-error "$BASE/hw_metrics.csv" -o /tmp/nats-v2/hw_metrics.csv
+          curl --fail --location --retry 3 --silent --show-error "$BASE/accuracies.csv" -o /tmp/nats-v2/accuracies.csv
+          sha256sum /tmp/nats-v2/hw_metrics.csv /tmp/nats-v2/accuracies.csv > /tmp/nats-v2/source-sha256.txt
+      - name: Evaluate an unseen first-edge architecture family (5/10/20%)
+        run: |
+          python -m benchmarks.pareto_hardware_study \
+            --hardware /tmp/nats-v2/hw_metrics.csv \
+            --accuracies /tmp/nats-v2/accuracies.csv \
+            --holdout-first-op nor_conv_3x3 \
+            --seeds 31 51 \
+            --fractions .05 .10 .20 \
+            --calibration 64 \
+            --output /tmp/pareto-hardware-family.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nats-mcu-real-pareto-family-holdout
+          path: |
+            /tmp/pareto-hardware-family.json
+            /tmp/nats-v2/source-sha256.txt
+          retention-days: 30

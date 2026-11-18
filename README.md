@@ -136,6 +136,22 @@ not a general or novel split–merge method. All existing defaults remain
 unchanged; a fair comparison trains controls on the same reduced
 training subset.
 
+## Hardware Pareto design selection (experimental)
+
+[Experiment 012](docs/experiments/pareto-hardware.md) evaluates a
+**bounded streaming proxy-grid archive** and five strong cheap-feature
+selection baselines on CC BY 4.0 **NATS-Bench-MCU v2**: real deployed
+microcontroller hardware energy, latency and memory measurements from
+14,281 designs. A shared ridge surrogate learns from 64 paid
+calibration outcomes; unselected true hardware/accuracy labels remain
+hidden until scoring. The objective is **feasible 3D Pareto-front
+recovery per expensive query**, not k-means MSE. It includes a
+disjoint architecture-family extrapolation test and a conditional
+epsilon-covering lemma with explicit non-applicability when archive
+cells are evicted. This is an offline replay, not an Exstill 5nm
+simulation or observed speedup in a new chip. All Sven production
+clustering defaults remain unchanged.
+
 ## Known limitations
 
 - Affine and Feistel shuffling are bijections, **not uniformly random shuffles**. Both are experimental. Affine can introduce ordering patterns; Feistel can add costly cycle-walking synchronizations, especially on GPUs.
