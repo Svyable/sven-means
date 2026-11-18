@@ -286,15 +286,12 @@ architectures**, further reducing statistical power.
 | nor_conv_3x3 | 0.5136 | 0.8904 | 0.7284 | **0.8941** |
 | avg_pool_3x3 | 0.8284 | 0.8416 | **0.9583** | 0.9551 |
 
-At the 10% held-out budget the grid exceeds random in **three or
-four** families (depending on rounding of the none family: it is
-0.7614 versus random 0.7627, so **four of five**).
-It exceeds farthest-first on **three of five**.
-However it exceeds the **best of the strong baselines in only one
-of five** (nor_conv_3x3, with a tiny 0.0037 absolute hypervolume
-difference over farthest-first). In three families either
-farthest-first or surrogate-only selection wins by a larger margin;
-in the fifth surrogate-only slightly wins.
+At the 10% held-out budget the grid exceeds random in
+**four of five** families and exceeds farthest-first on **three
+of five**. However it exceeds the **best of the strong baselines
+in only one of five** (nor_conv_3x3, by only 0.0037 absolute
+hypervolume over farthest-first). The other **four** families
+have a better performing farthest-first or surrogate-only baseline.
 
 All family-level raw results include 5%, 10%, 20% budgets, exact
 Pareto-front hit rates, epsilon coverage, discovered feasible
