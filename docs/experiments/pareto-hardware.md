@@ -221,3 +221,121 @@ a fully independent pre-result confirmation of the algorithm.
   evaluation reduction**, not cheap CSV lookup runtime; record
   strongest multiobjective active-learning baselines, uncertainty
   calibration, and family-disjoint generalization.
+
+
+## Corrected measured results — November 18, 2026 UTC
+
+[**Green run 44319398154**](https://github.com/Svyable/sven-means/actions/runs/44319398154)
+executed the corrected nested-budget protocol. **Seven jobs passed**:
+independent correctness checks, full 14,281-design replay, and all
+five externally held-out architecture-family extrapolations. Raw
+architecture ID selections, individual seed metrics, source SHA-256
+and wall-clock costs are in separate GitHub Actions artifacts.
+
+Pinned authors' source revision:
+c92adc0ec112bdee6c73358cc52f3e026367b5a0.
+
+- hw_metrics.csv SHA256:
+  ae318c606d6095ec31ac7383c20e330a6b1e850c8430f6ba20974e00c5d4f693
+- accuracies.csv SHA256:
+  948fa57fa643dbf749dc394f9f38ab20639737de1a2054d5a72e1be15dd76fae
+
+### Full 14,281 deployed architectures
+
+The strict feasible 3D Pareto front has **four** designs. The
+table is mean exact 3D hypervolume recovered from three independent
+policy/calibration seeds (31/51/73), with 64 shared calibration
+queries INCLUDED in every budget. Larger is better:
+
+| Policy | 143 evaluations (1%) | 715 (5%) | 1429 (10%) |
+|---|---:|---:|---:|
+| Random | 0.7152 | 0.9082 | 0.9107 |
+| Family-stratified random | 0.7815 | 0.8290 | **0.9304** |
+| Farthest-first | 0.8006 | 0.8720 | 0.9072 |
+| K-means++ D² | 0.7563 | 0.8802 | 0.8820 |
+| Surrogate-only exploitation rank | **0.8251** | **0.9186** | 0.9186 |
+| Bounded streaming proxy-grid archive | 0.8217 | 0.8730 | 0.9186 |
+
+**No persistent superiority** for the proposed grid. At 1% the
+simple exploitation baseline slightly wins; at 5% the grid loses
+to exploitation and *random*; at 10% stratified random exceeds both
+grid and exploitation. All baseline policies except capacity-specific
+grid produce nondecreasing hypervolume by construction and explicit
+test as their budget grows.
+
+At 1429 total queries, the measured mean *selection-only* CPU time
+for grid was **~2138 milliseconds**, compared with **~5 ms** for
+surrogate rank and ~1027 ms for farthest-first. Shared initial
+surrogate fitting is reported separately in JSON. These are
+small-CPU software costs, **not hardware deployment times**.
+
+### Five held-out first-edge topology families
+
+Surrogate was trained using 64 **paid** examples from the other four
+topology families, and each row below is selected exclusively from
+the held-out family. Two fixed seeds 31/51, 10% of the held-out
+family as the total query budget, including those 64 evaluations.
+Strict feasible true front size varies by family: generally **2–3
+architectures**, further reducing statistical power.
+
+| Unseen family | Random | Farthest-first | Surrogate rank | Streaming grid |
+|---|---:|---:|---:|---:|
+| none | 0.7627 | **0.8482** | 0.7639 | 0.7614 |
+| skip_connect | 0.7193 | 0.7117 | **0.9799** | 0.9655 |
+| nor_conv_1x1 | 0.7518 | **0.9362** | 0.8400 | 0.8401 |
+| nor_conv_3x3 | 0.5136 | 0.8904 | 0.7284 | **0.8941** |
+| avg_pool_3x3 | 0.8284 | 0.8416 | **0.9583** | 0.9551 |
+
+At the 10% held-out budget the grid exceeds random in **three or
+four** families (depending on rounding of the none family: it is
+0.7614 versus random 0.7627, so **four of five**).
+It exceeds farthest-first on **three of five**.
+However it exceeds the **best of the strong baselines in only one
+of five** (nor_conv_3x3, with a tiny 0.0037 absolute hypervolume
+difference over farthest-first). In three families either
+farthest-first or surrogate-only selection wins by a larger margin;
+in the fifth surrogate-only slightly wins.
+
+All family-level raw results include 5%, 10%, 20% budgets, exact
+Pareto-front hit rates, epsilon coverage, discovered feasible
+architecture counts and time. The broad family sweep was explicitly
+post-first-run: not independently preregistered confirmation.
+
+### Interpretation, prior art and decision
+
+These are **measurements on real silicon** supplied by the
+NATS-Bench-MCU authors, reused in an **offline replay**. We have
+not fabricated a chip, run Exstill's proprietary design model,
+simulated the 5nm gate-level co-design primitives, trained a new
+architecture or performed any new physical deployments.
+
+The grid's archive state is capacity bounded, and its conditional
+epsilon-cell lemma is valid only under conditions not established
+in this experiment. Grid archiving and epsilon-dominance are
+well-established prior art (Laumanns et al., 2002), and this
+study does not justify a new algorithmic priority claim.
+
+**Outcome:** do NOT present the streaming grid as a general
+breakthrough or ship it as an Exstill integration. The experiment
+does provide a **reproducible leakage-audited evaluation harness**,
+source-pinned physically measured objectives, exact 3D hypervolume,
+budget-charged calibration, tough cheap-feature baselines and
+family-disjoint extrapolation — useful infrastructure for subsequent
+rigorous proposals.
+
+A follow-up would need:
+1. A design-space benchmark with a *larger, meaningfully distributed*
+   true feasible frontier, without post-hoc loosening of this dataset's
+   thresholds and calling it independent.
+2. Sequential multiobjective active-learning / Bayesian search
+   baselines including expensive-evaluation cost, uncertainty
+   calibration, candidate-family generalization, and true workload
+   evaluation costs.
+3. A genuinely **new mechanism** that outperforms those controls
+   across multiple hardware platforms and seed/data splits, with
+   theoretical qualifications correctly bounded.
+4. A direct applicability test to Exstill's actual bottleneck; its
+   10M costed designs are **not** 10M full routed circuit simulations.
+
+**Publication decision:** no new general performance or theoretical
+breakthrough claim based on Experiment 012.
