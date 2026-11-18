@@ -162,3 +162,62 @@ Reproduce:
 
 Full source data can be obtained from:
 https://github.com/ankilab/NATS-Bench-MCU/tree/c92adc0ec112bdee6c73358cc52f3e026367b5a0/export_corrected
+
+
+## Post-first-run methodological correction and expanded follow-up
+
+**Disclosure: the following changes were made AFTER inspecting the
+first CI run, not part of the initial preregistered design.**
+
+The initial run [44318746830](https://github.com/Svyable/sven-means/actions/runs/44318746830)
+passed all correctness and real-hardware jobs. The first 14,281-design
+evaluation demonstrated that the globally feasible strict 3D Pareto
+front contains only **four** designs, and the preselected
+nor_conv_3x3 family contains only **three**. Hypervolume is thus a
+highly low-cardinality statistic; do not interpret small changes
+across 2–3 seeds as robust evidence of a new method.
+
+The initial code independently seeded each method as
+seed + 37 * evaluation_budget. This unintentionally made
+random/stratified/diversity policies choose unrelated sets at
+1/5/10% budgets, producing mathematically confusing
+non-monotone hypervolume (e.g. random global mean 0.9113
+at 5% vs 0.8712 at 10%). **This is not a failure of hypervolume**;
+it reflects entirely different random subsets. The corrected
+protocol uses the SAME method seed at every budget. Classical
+random/stratified/farthest-first/k-means++/surrogate-rank policies
+are now **nested by construction**. A runtime invariant rejects
+a run if their *true oracle* hypervolume declines with added
+evaluations. The fixed-capacity proxy-grid archive is **not**
+nested because resizing may evict cells; report nonmonotonic
+results honestly if any.
+
+No selection hyperparameter, model ridge penalty, feasibility
+limit, objective, data-split seed, or candidate score was changed
+after the initial outcomes. All estimates from the first run
+must be labeled **superseded for budget-curve comparisons**.
+
+Because one prechosen held-out family has just 3 true frontier
+points, the research follow-up is expanded to test **ALL FIVE**
+first-edge operation families as separate extrapolation tests:
+none, skip_connect, nor_conv_1x1, nor_conv_3x3, avg_pool_3x3.
+Two fixed seeds 31/51 and 5/10/20% total budgets for each,
+with calibration labels exclusively from the other four
+families. This all-family follow-up was chosen *after* seeing the
+first family; it is more resistant to cherry picking but is NOT
+a fully independent pre-result confirmation of the algorithm.
+
+### Decisions to take from the corrected run
+
+- If the grid archive does not exceed simple proxy-ranked or
+  farthest-first selection at equal expensive-query budgets across
+  the family sweep, state clearly **no breakthrough**.
+- The same 3–4-point strict Pareto frontier may make the entire
+  dataset unsuitable for detecting subtle frontier preservation.
+  A future study must choose another benchmark based on *a
+  registered independent problem*, not relax thresholds and
+  relabel the current data as fresh.
+- For a real science contribution, tie benefits to **expensive
+  evaluation reduction**, not cheap CSV lookup runtime; record
+  strongest multiobjective active-learning baselines, uncertainty
+  calibration, and family-disjoint generalization.
