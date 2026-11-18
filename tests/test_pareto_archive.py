@@ -99,3 +99,20 @@ def test_invalid_pools_and_calibration():
     with pytest.raises(ValueError):
         streaming_proxy_grid(proxy,np.zeros((len(x),3)),size,
                              np.arange(4),f,5,9)
+
+
+@pytest.mark.parametrize("method", [
+    "random","stratified","kmeans++","farthest","proxy_rank"
+])
+def test_standard_policies_are_nested_at_fixed_seed(method):
+    tops,size=fake_arches(130)
+    x,f=topology_features(tops,size)
+    rng=np.random.default_rng(99)
+    proxy=np.column_stack((
+        rng.normal(-2,1,len(x)),rng.normal(1,1,len(x)),
+        rng.normal(90,4,len(x))))
+    cal=np.arange(18)
+    candidates=np.arange(18,len(x))
+    prefix=choose_candidates(method,x,proxy,size,f,cal,candidates,12,seed=18)
+    longer=choose_candidates(method,x,proxy,size,f,cal,candidates,34,seed=18)
+    assert prefix==longer[:12]
